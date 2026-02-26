@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(matlab -batch \"cd\\(''C:/Users/Henrique/ARTIGO/identification''\\); new_identification\")"
+    ]
+  }
+}
