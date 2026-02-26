@@ -10,15 +10,14 @@ dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q_ref, con
 
 ## Modos de Operação
 
-A função opera em três modos, selecionados pelo tamanho do vetor de estados `y` e pelo campo `constants.mode`:
+A função opera em dois modos, selecionados automaticamente pelo tamanho do vetor de estados `y`:
 
 | Modo | Estados | Vetor `y` | Uso |
 |------|---------|-----------|-----|
-| **Rotacional** | 3 | `[p; q; r]` | Identificação rotacional (EEM/OEM) e validação |
-| **9 estados** | 9 | `[p; q; r; phi; theta; psi; u; v; w]` | Simulação completa (não usado atualmente) |
-| **Translacional** | 3 | `[u; v; w]` | Validação translacional com `p,q,r` e atitude de fonte externa |
+| **Rotacional** | 3 | `[p; q; r]` | Identificação rotacional (EEM/OEM) |
+| **Completo (9 estados)** | 9 | `[p; q; r; phi; theta; psi; u; v; w]` | Validação acoplada (rotacional + cinemática + translacional) |
 
-O modo translacional é ativado quando `constants.mode = 'translational'` e requer `constants.measured_data`.
+O modo rotacional integra apenas as acelerações angulares. O modo completo de 9 estados acopla a dinâmica rotacional com a cinemática de Euler (propagação de atitude) e a dinâmica translacional, formando um modelo totalmente acoplado onde a saída translacional depende diretamente dos estados rotacionais simulados.
 
 ## Vetor de Parâmetros P (24 elementos)
 
@@ -117,26 +116,26 @@ v_dot = p*w - r*u + Fy/m + Yv*v
 w_dot = q*u - p*v + Fz/m + Zw*w + Bz
 ```
 
-## Modo Translacional (constants.mode = 'translational')
+## Modo Completo de 9 Estados
 
-Integra apenas `[u; v; w]`, interpolando `p, q, r, phi, theta, psi` de dados medidos (ou simulados) fornecidos em `constants.measured_data`:
+No modo de 9 estados, a função integra simultaneamente:
+
+1. **Rotacional**: `[p_dot, q_dot, r_dot]` — dinâmica angular (momentos dos motores, acoplamento giroscópico, amortecimento)
+2. **Cinemática**: `[phi_dot, theta_dot, psi_dot]` — propagação de atitude via cinemática de Euler
+3. **Translacional**: `[u_dot, v_dot, w_dot]` — dinâmica de velocidades no frame body (gravidade via R_nb, empuxo, arrasto)
+
+As entradas do translacional (p, q, r, phi, theta, psi) vêm diretamente dos estados simulados pelo modelo rotacional e cinemático. Isso produz um modelo totalmente acoplado que representa fielmente o comportamento simulado do veículo.
 
 ```matlab
-constants.mode = 'translational';
-constants.measured_data.time  = time_vector;
-constants.measured_data.p     = p_data;     % pode ser medido ou simulado
-constants.measured_data.q     = q_data;
-constants.measured_data.r     = r_data;
-constants.measured_data.phi   = phi_data;   % em radianos
-constants.measured_data.theta = theta_data;
-constants.measured_data.psi   = psi_data;
+% Condição inicial para validação com 9 estados
+y0 = [p(1); q(1); r(1); phi(1); theta(1); psi(1); 0; 0; 0];
+[t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P, time, pwm, func_T, func_Q, constants), tspan, y0);
 ```
 
 ## Sub-funções Internas
 
 | Função | Descrição |
 |--------|-----------|
-| `translational_mode()` | Implementa o modo translacional de 3 estados |
 | `euler_kinematics()` | Cinemática de Euler: `[p,q,r]` → `[phi_dot, theta_dot, psi_dot]` |
 | `translational_eqs()` | Equações dinâmicas translacionais (gravidade via R_nb completa) |
 

@@ -86,17 +86,21 @@ accZ_m = q*u - p*v - T/m + Zw*w + Bz
 
 ## Validação (simulate_full)
 
-Função interna que simula o modelo completo para treino e validação:
+Função interna que simula o modelo completo de **9 estados acoplados** para treino e validação:
 
-1. **Rotacional**: `ode45` com 3 estados `[p, q, r]`, usando `vtol_dynamics.m`.
-2. **Translacional**: `ode45` com 3 estados `[u, v, w]`, usando `vtol_dynamics.m` no modo `translational`.
-   - Utiliza **p, q, r simulados** (do modelo rotacional) como entrada — modelo acoplado.
-   - Atitude (phi, theta, psi) vem dos dados **medidos** (EKF do ArduPilot).
-3. **Força específica**: Calculada subtraindo a gravidade da aceleração inercial:
+1. **Integração única com `ode45`**: Vetor de estados `y = [p; q; r; phi; theta; psi; u; v; w]`.
+   - **Rotacional** (p, q, r): dinâmica angular completa com momentos dos motores.
+   - **Cinemática** (phi, theta, psi): propagação de atitude via equações de Euler.
+   - **Translacional** (u, v, w): dinâmica de velocidades com gravidade, empuxo e arrasto.
+   - Modelo **totalmente acoplado**: a dinâmica translacional recebe p, q, r e atitudes diretamente dos estados simulados pelo modelo rotacional, representando fielmente o comportamento do modelo.
+2. **Condição inicial**: `y0 = [p(1); q(1); r(1); phi(1); theta(1); psi(1); 0; 0; 0]`
+   - Velocidades angulares e atitude inicializadas com dados medidos.
+   - Velocidades translacionais inicializadas em zero (hover).
+3. **Força específica**: Calculada subtraindo a gravidade (usando atitude **simulada**) da aceleração inercial:
    ```
-   accX_s = u_dot - gx    onde gx = -g*sin(theta)
-   accY_s = v_dot - gy    onde gy =  g*cos(theta)*sin(phi)
-   accZ_s = w_dot - gz    onde gz =  g*cos(theta)*cos(phi)
+   accX_s = u_dot - gx    onde gx = -g*sin(theta_sim)
+   accY_s = v_dot - gy    onde gy =  g*cos(theta_sim)*sin(phi_sim)
+   accZ_s = w_dot - gz    onde gz =  g*cos(theta_sim)*cos(phi_sim)
    ```
 
 ## Funções Internas (Local Functions)
@@ -105,7 +109,7 @@ Função interna que simula o modelo completo para treino e validação:
 |--------|-----------|
 | `oem_multi_seg_cost` | Wrapper: acumula resíduos de múltiplos segmentos |
 | `oem_ms_cost_func` | Core: calcula resíduos rotacionais (RK4) + translacionais (Euler) |
-| `simulate_full` | Simulação completa com ode45 para validação |
+| `simulate_full` | Simulação completa 9-estados acoplados com ode45 para validação |
 | `print_R2` | Imprime R² de treino e validação |
 | `plot_all_results` | Gera gráficos p/q/r e AccX/Y/Z (treino + validação) |
 | `plot_torques` | Diagnóstico: momentos Mx, My, Mz vs entradas PWM |

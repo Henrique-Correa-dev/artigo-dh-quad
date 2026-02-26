@@ -2,9 +2,7 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     % Função ODE da dinâmica do VTOL
     %
     % Modo 3 estados: y = [p; q; r]                              -> rotacional
-    % Modo 9 estados: y = [p; q; r; phi; theta; psi; u; v; w]    -> completa
-    % Modo 3 estados translacional: y = [u; v; w]                -> translacional com dados medidos
-    %   Requer constants.mode = 'translational' e constants.measured_data
+    % Modo 9 estados: y = [p; q; r; phi; theta; psi; u; v; w]    -> completa (acoplado)
     %
     % P: vetor de 20 ou 24 parâmetros identificáveis
     %   P(1:4)   = [Jx, Jy, Jz, Jxz] (momentos de inércia)
@@ -14,7 +12,7 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     %   P(16:18) = Bp, Bq, Br
     %   P(19:20) = [dx_cg, dy_cg] (offset CG vs CAD)
     %   P(21:24) = [Xu_m, Yv_m, Zw_m, Bz] (opcional, defaults se ausente)
-    % constants: struct com .m, .g, e opcionalmente .mode e .measured_data
+    % constants: struct com .m, .g
 
     n_states = length(y);
 
@@ -30,12 +28,6 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
         Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz_param = P(24);
     else
         Xu_m = -4.0; Yv_m = -4.0; Zw_m = -0.1; Bz_param = -0.5;
-    end
-
-    % Verificar modo translacional (3 estados, mas u,v,w com dados medidos de p,q,r,att)
-    if nargin >= 8 && ~isempty(constants) && isfield(constants, 'mode') && strcmp(constants.mode, 'translational')
-        dydt = translational_mode(t, y, P, pwm_time, pwm_signals, func_T_ref, constants, Xu_m, Yv_m, Zw_m, Bz_param);
-        return;
     end
 
     p = y(1);
@@ -122,7 +114,7 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
         m_body = constants.m;
         g_acc  = constants.g;
     else
-        m_body = 1.4;
+        m_body = 1.6011;
         g_acc  = 9.81;
     end
 
@@ -131,40 +123,6 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
         Tmr1+Tmr2+Tmr3+Tmr4, m_body, g_acc, Xu_m, Yv_m, Zw_m, Bz_param);
 
     dydt = [p_dot; q_dot; r_dot; phi_dot; theta_dot; psi_dot; u_dot; v_dot; w_dot];
-end
-
-% =========================================================================
-%  Modo translacional: y=[u;v;w], p,q,r e atitude vêm dos dados medidos
-%  (idêntico ao Simulink e ao model.m)
-% =========================================================================
-function dydt = translational_mode(t, y, P, pwm_time, pwm_signals, func_T_ref, constants, Xu_m, Yv_m, Zw_m, Bz_param)
-    u = y(1); v = y(2); w = y(3);
-
-    m_body = constants.m;
-    g_acc  = constants.g;
-    md = constants.measured_data;
-
-    % Interpolar dados medidos no instante t
-    p     = interp1(md.time, md.p, t, 'linear', 'extrap');
-    q     = interp1(md.time, md.q, t, 'linear', 'extrap');
-    r     = interp1(md.time, md.r, t, 'linear', 'extrap');
-    phi   = interp1(md.time, md.phi, t, 'linear', 'extrap');
-    theta = interp1(md.time, md.theta, t, 'linear', 'extrap');
-    psi   = interp1(md.time, md.psi, t, 'linear', 'extrap');
-
-    % Empuxo total (N) com k_T
-    k_T = P(5:8);
-    current_pwm = zeros(1,4);
-    for i = 1:4
-        current_pwm(i) = interp1(pwm_time, pwm_signals(:,i), t, 'linear', 'extrap');
-    end
-    T_total = k_T(1)*func_T_ref(current_pwm(1)) + k_T(2)*func_T_ref(current_pwm(2)) + ...
-              k_T(3)*func_T_ref(current_pwm(3)) + k_T(4)*func_T_ref(current_pwm(4));
-
-    [u_dot, v_dot, w_dot] = translational_eqs(p, q, r, u, v, w, phi, theta, psi, ...
-        T_total, m_body, g_acc, Xu_m, Yv_m, Zw_m, Bz_param);
-
-    dydt = [u_dot; v_dot; w_dot];
 end
 
 % =========================================================================
