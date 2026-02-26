@@ -241,9 +241,10 @@ var_az = var(acc_cat(:,3)); if var_az < 1e-12, var_az = 1; end
 weights_acc = [1/var_ax; 1/var_ay; 1/var_az];
 
 win_durations = [1.0, 2.0, 3.0, 5.0];
-P_current = P_eem;
+P_rot_current = P_eem(1:n_rot);
+P_trans_current = P_eem(n_rot+1:n_params);
 best_R2_mean = -Inf;
-P_best = P_eem;
+P_rot_best = P_rot_current;
 best_stage_name = 'EEM';
 
 for stage = 1:length(win_durations)
@@ -255,11 +256,13 @@ for stage = 1:length(win_durations)
     end
 
     fprintf('\n==========================================================\n');
-    fprintf('  FASE B.%d: OEM [%s] (%d segmentos)\n', stage, stage_name, n_seg);
+    fprintf('  FASE B.%d: OEM Rotacional [%s] (%d segmentos, P1:%d)\n', stage, stage_name, n_seg, n_rot);
     fprintf('==========================================================\n');
 
-    cost_oem = @(P) oem_multi_seg_cost(P, segs, win_sec, ...
-        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc);
+    % Custo rotacional: otimiza P(1:n_rot), P_trans fixo
+    P_trans_fixed = P_trans_current;
+    cost_oem_rot = @(P_rot) oem_multi_seg_cost([P_rot; P_trans_fixed], segs, win_sec, ...
+        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc, 'rotational');
 
     max_iter = 500;
     if isinf(win_sec), max_iter = 1000; end
@@ -272,12 +275,13 @@ for stage = 1:length(win_durations)
         'StepTolerance', 1e-14, ...
         'FunctionTolerance', 1e-14);
 
-    [P_current, rn, ~, ef] = lsqnonlin(cost_oem, P_current, lb, ub, opts_oem);
+    [P_rot_current, rn, ~, ef] = lsqnonlin(cost_oem_rot, P_rot_current, lb(1:n_rot), ub(1:n_rot), opts_oem);
     fprintf('  [%s] Resnorm: %.4f | Exit: %d\n', stage_name, rn, ef);
 
-    % Avaliar validação para escolher o melhor estágio
+    % Avaliar validação rotacional para escolher o melhor estágio
+    P_eval = [P_rot_current; P_trans_current];
     sg_eval = segs{1};
-    res_eval = simulate_full(P_current, sg_eval.time, sg_eval.pwm, sg_eval.pqr, sg_eval.acc, sg_eval.att, ...
+    res_eval = simulate_full(P_eval, sg_eval.time, sg_eval.pwm, sg_eval.pqr, sg_eval.acc, sg_eval.att, ...
         time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
         func_T_ref, func_Q_ref, constants_sim, ode_opts);
 
@@ -291,7 +295,7 @@ for stage = 1:length(win_durations)
 
         if R2_mean_stage > best_R2_mean
             best_R2_mean = R2_mean_stage;
-            P_best = P_current;
+            P_rot_best = P_rot_current;
             best_stage_name = stage_name;
         end
     else
@@ -299,8 +303,32 @@ for stage = 1:length(win_durations)
     end
 end
 
-P_final = P_best;
-fprintf('\n  >>> Melhor estágio: [%s] com R² médio = %.4f\n', best_stage_name, best_R2_mean);
+fprintf('\n  >>> Melhor estágio rotacional: [%s] com R² médio = %.4f\n', best_stage_name, best_R2_mean);
+
+%% ========================================================================
+%  8b. FASE C: OEM Translacional (P21:24 apenas, P1:20 fixos)
+%  ========================================================================
+fprintf('\n==========================================================\n');
+fprintf('  FASE C: OEM Translacional (P%d:%d, rotacional fixo)\n', n_rot+1, n_params);
+fprintf('==========================================================\n');
+
+P_rot_fixed = P_rot_best;
+cost_oem_trans = @(P_trans) oem_multi_seg_cost([P_rot_fixed; P_trans], segs, Inf, ...
+    constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc, 'translational');
+
+opts_trans = optimoptions('lsqnonlin', ...
+    'Algorithm', 'trust-region-reflective', ...
+    'Display', 'iter', ...
+    'MaxIterations', 1000, ...
+    'MaxFunctionEvaluations', 40000, ...
+    'StepTolerance', 1e-14, ...
+    'FunctionTolerance', 1e-14);
+
+[P_trans_opt, rn_t, ~, ef_t] = lsqnonlin(cost_oem_trans, P_trans_current, ...
+    lb(n_rot+1:n_params), ub(n_rot+1:n_params), opts_trans);
+fprintf('  Trans Resnorm: %.4f | Exit: %d\n', rn_t, ef_t);
+
+P_final = [P_rot_best; P_trans_opt];
 
 fprintf('\n  --- Parâmetros Finais ---\n');
 for i = 1:n_params
@@ -320,10 +348,10 @@ fprintf('    G5=%8.4f  G6=%8.4f  G7=%8.4f  G8=%8.4f  InvJy=%8.4f\n', ...
     Jx_f/gam0_f, 1/Jy_f);
 
 %% ========================================================================
-%  9. VALIDAÇÃO COM P_final (todos os segmentos de treino + validação)
+%  9. VALIDAÇÃO COM P_final
 %  ========================================================================
 fprintf('\n==========================================================\n');
-fprintf('  VALIDAÇÃO COM P_final (OEM)\n');
+fprintf('  VALIDAÇÃO COM P_final (Rot + Trans separados)\n');
 fprintf('==========================================================\n');
 
 sg = segs{1};
@@ -372,8 +400,10 @@ disp('Script finalizado.');
 %  FUNÇÕES LOCAIS
 %  ========================================================================
 
-function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights_acc)
+function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights_acc, cost_mode)
 % Custo OEM multi-segmento: concatena resíduos de cada segmento.
+% cost_mode: 'full' (padrão), 'rotational', 'translational'
+    if nargin < 9, cost_mode = 'full'; end
     e_all = [];
     for s = 1:length(segs)
         sg = segs{s};
@@ -393,7 +423,7 @@ function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights
 
         e_seg = oem_ms_cost_func(P, sg.pqr, sg.acc, sg.att_rad, ...
             sg.T_ref, sg.Q_ref, m, g, dt, N, ...
-            win_starts, win_ends, weights_pqr, weights_acc);
+            win_starts, win_ends, weights_pqr, weights_acc, cost_mode);
 
         e_all = [e_all; e_seg]; %#ok<AGROW>
     end
@@ -401,7 +431,9 @@ function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights
 end
 
 function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, ...
-    win_starts, win_ends, weights_pqr, weights_acc)
+    win_starts, win_ends, weights_pqr, weights_acc, cost_mode)
+
+    if nargin < 15, cost_mode = 'full'; end
 
     % Inércias → constantes G (corpo rígido, consistência garantida)
     Jx = P(1); Jy = P(2); Jz = P(3); Jxz = P(4);
@@ -504,7 +536,13 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
              sw_a(2)*(acc(:,2) - accY_m); ...
              sw_a(3)*(acc(:,3) - accZ_m)];
 
-    e = [e_rot; e_acc];
+    if strcmp(cost_mode, 'rotational')
+        e = e_rot;
+    elseif strcmp(cost_mode, 'translational')
+        e = e_acc;
+    else
+        e = [e_rot; e_acc];
+    end
 end
 
 function res = simulate_full(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, ...
