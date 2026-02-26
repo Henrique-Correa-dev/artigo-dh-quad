@@ -240,11 +240,10 @@ var_ay = var(acc_cat(:,2)); if var_ay < 1e-12, var_ay = 1; end
 var_az = var(acc_cat(:,3)); if var_az < 1e-12, var_az = 1; end
 weights_acc = [1/var_ax; 1/var_ay; 1/var_az];
 
-win_durations = [1.0, 2.0, 3.0, 5.0];
-P_rot_current = P_eem(1:n_rot);
-P_trans_current = P_eem(n_rot+1:n_params);
+win_durations = [1.0, 2.0, 3.0];
+P_current = P_eem;
 best_R2_mean = -Inf;
-P_rot_best = P_rot_current;
+P_best = P_eem;
 best_stage_name = 'EEM';
 
 for stage = 1:length(win_durations)
@@ -256,13 +255,11 @@ for stage = 1:length(win_durations)
     end
 
     fprintf('\n==========================================================\n');
-    fprintf('  FASE B.%d: OEM Rotacional [%s] (%d segmentos, P1:%d)\n', stage, stage_name, n_seg, n_rot);
+    fprintf('  FASE B.%d: OEM [%s] (%d segmentos)\n', stage, stage_name, n_seg);
     fprintf('==========================================================\n');
 
-    % Custo rotacional: otimiza P(1:n_rot), P_trans fixo
-    P_trans_fixed = P_trans_current;
-    cost_oem_rot = @(P_rot) oem_multi_seg_cost([P_rot; P_trans_fixed], segs, win_sec, ...
-        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc, 'rotational');
+    cost_oem = @(P) oem_multi_seg_cost(P, segs, win_sec, ...
+        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc);
 
     max_iter = 500;
     if isinf(win_sec), max_iter = 1000; end
@@ -275,13 +272,12 @@ for stage = 1:length(win_durations)
         'StepTolerance', 1e-14, ...
         'FunctionTolerance', 1e-14);
 
-    [P_rot_current, rn, ~, ef] = lsqnonlin(cost_oem_rot, P_rot_current, lb(1:n_rot), ub(1:n_rot), opts_oem);
+    [P_current, rn, ~, ef] = lsqnonlin(cost_oem, P_current, lb, ub, opts_oem);
     fprintf('  [%s] Resnorm: %.4f | Exit: %d\n', stage_name, rn, ef);
 
-    % Avaliar validação rotacional para escolher o melhor estágio
-    P_eval = [P_rot_current; P_trans_current];
+    % Avaliar validação para escolher o melhor estágio
     sg_eval = segs{1};
-    res_eval = simulate_full(P_eval, sg_eval.time, sg_eval.pwm, sg_eval.pqr, sg_eval.acc, sg_eval.att, ...
+    res_eval = simulate_full(P_current, sg_eval.time, sg_eval.pwm, sg_eval.pqr, sg_eval.acc, sg_eval.att, ...
         time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
         func_T_ref, func_Q_ref, constants_sim, ode_opts);
 
@@ -295,7 +291,7 @@ for stage = 1:length(win_durations)
 
         if R2_mean_stage > best_R2_mean
             best_R2_mean = R2_mean_stage;
-            P_rot_best = P_rot_current;
+            P_best = P_current;
             best_stage_name = stage_name;
         end
     else
@@ -303,32 +299,9 @@ for stage = 1:length(win_durations)
     end
 end
 
-fprintf('\n  >>> Melhor estágio rotacional: [%s] com R² médio = %.4f\n', best_stage_name, best_R2_mean);
+fprintf('\n  >>> Melhor estágio: [%s] com R² médio = %.4f\n', best_stage_name, best_R2_mean);
 
-%% ========================================================================
-%  8b. FASE C: OEM Translacional (P21:24 apenas, P1:20 fixos)
-%  ========================================================================
-fprintf('\n==========================================================\n');
-fprintf('  FASE C: OEM Translacional (P%d:%d, rotacional fixo)\n', n_rot+1, n_params);
-fprintf('==========================================================\n');
-
-P_rot_fixed = P_rot_best;
-cost_oem_trans = @(P_trans) oem_multi_seg_cost([P_rot_fixed; P_trans], segs, Inf, ...
-    constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc, 'translational');
-
-opts_trans = optimoptions('lsqnonlin', ...
-    'Algorithm', 'trust-region-reflective', ...
-    'Display', 'iter', ...
-    'MaxIterations', 1000, ...
-    'MaxFunctionEvaluations', 40000, ...
-    'StepTolerance', 1e-14, ...
-    'FunctionTolerance', 1e-14);
-
-[P_trans_opt, rn_t, ~, ef_t] = lsqnonlin(cost_oem_trans, P_trans_current, ...
-    lb(n_rot+1:n_params), ub(n_rot+1:n_params), opts_trans);
-fprintf('  Trans Resnorm: %.4f | Exit: %d\n', rn_t, ef_t);
-
-P_final = [P_rot_best; P_trans_opt];
+P_final = P_best;
 
 fprintf('\n  --- Parâmetros Finais ---\n');
 for i = 1:n_params
@@ -367,6 +340,9 @@ plot_all_results('P_final', ...
 
 % Diagnóstico: Torques Mx, My, Mz na janela de validação
 plot_torques(P_final, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val);
+
+% Diagnóstico: Forças Fx, Fy, Fz na janela de validação
+plot_forces(P_final, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val);
 
 %% 10. RESUMO FINAL: P0 vs P_final (apenas validação)
 fprintf('\n==========================================================\n');
@@ -576,66 +552,78 @@ function res = simulate_full(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, ...
         res.pqr_vl_ok = false;
     end
 
-    const_trans_tr = constants_sim;
-    const_trans_tr.mode = 'translational';
-    const_trans_tr.measured_data.time  = time_tr;
-    const_trans_tr.measured_data.p     = pqr_tr(:,1);
-    const_trans_tr.measured_data.q     = pqr_tr(:,2);
-    const_trans_tr.measured_data.r     = pqr_tr(:,3);
-    const_trans_tr.measured_data.phi   = deg2rad(att_tr(:,1));
-    const_trans_tr.measured_data.theta = deg2rad(att_tr(:,2));
-    const_trans_tr.measured_data.psi   = deg2rad(att_tr(:,3));
+    % Translacional usa p,q,r SIMULADOS (modelo acoplado — mais realista)
+    % Atitude (phi,theta,psi) continua medida (vem do EKF, não temos modelo cinemático)
+    if res.pqr_tr_ok
+        const_trans_tr = constants_sim;
+        const_trans_tr.mode = 'translational';
+        const_trans_tr.measured_data.time  = time_tr;
+        const_trans_tr.measured_data.p     = res.p_s_tr;   % SIMULADO
+        const_trans_tr.measured_data.q     = res.q_s_tr;   % SIMULADO
+        const_trans_tr.measured_data.r     = res.r_s_tr;   % SIMULADO
+        const_trans_tr.measured_data.phi   = deg2rad(att_tr(:,1));
+        const_trans_tr.measured_data.theta = deg2rad(att_tr(:,2));
+        const_trans_tr.measured_data.psi   = deg2rad(att_tr(:,3));
 
-    try
-        ode_t = @(t,y) vtol_dynamics(t, y, P, time_tr, pwm_tr, func_T_ref, func_Q_ref, const_trans_tr);
-        [t_s, y_s] = ode45(ode_t, time_tr, [0;0;0], ode_opts);
-        uvw = interp1(t_s, y_s, time_tr, 'linear', 'extrap');
-        res.accX_s_tr = zeros(N_tr,1); res.accY_s_tr = zeros(N_tr,1); res.accZ_s_tr = zeros(N_tr,1);
-        phi_tr = const_trans_tr.measured_data.phi;
-        theta_tr = const_trans_tr.measured_data.theta;
-        for k = 1:N_tr
-            dy = vtol_dynamics(time_tr(k), uvw(k,:)', P, time_tr, pwm_tr, func_T_ref, func_Q_ref, const_trans_tr);
-            gx_k = -constants_sim.g * sin(theta_tr(k));
-            gy_k =  constants_sim.g * cos(theta_tr(k)) * sin(phi_tr(k));
-            gz_k =  constants_sim.g * cos(theta_tr(k)) * cos(phi_tr(k));
-            res.accX_s_tr(k) = dy(1) - gx_k;
-            res.accY_s_tr(k) = dy(2) - gy_k;
-            res.accZ_s_tr(k) = dy(3) - gz_k;
+        try
+            ode_t = @(t,y) vtol_dynamics(t, y, P, time_tr, pwm_tr, func_T_ref, func_Q_ref, const_trans_tr);
+            [t_s, y_s] = ode45(ode_t, time_tr, [0;0;0], ode_opts);
+            uvw = interp1(t_s, y_s, time_tr, 'linear', 'extrap');
+            res.accX_s_tr = zeros(N_tr,1); res.accY_s_tr = zeros(N_tr,1); res.accZ_s_tr = zeros(N_tr,1);
+            phi_tr = const_trans_tr.measured_data.phi;
+            theta_tr = const_trans_tr.measured_data.theta;
+            for k = 1:N_tr
+                dy = vtol_dynamics(time_tr(k), uvw(k,:)', P, time_tr, pwm_tr, func_T_ref, func_Q_ref, const_trans_tr);
+                gx_k = -constants_sim.g * sin(theta_tr(k));
+                gy_k =  constants_sim.g * cos(theta_tr(k)) * sin(phi_tr(k));
+                gz_k =  constants_sim.g * cos(theta_tr(k)) * cos(phi_tr(k));
+                res.accX_s_tr(k) = dy(1) - gx_k;
+                res.accY_s_tr(k) = dy(2) - gy_k;
+                res.accZ_s_tr(k) = dy(3) - gz_k;
+            end
+            res.full_tr_ok = true;
+        catch
+            res.accX_s_tr = NaN(N_tr,1); res.accY_s_tr = NaN(N_tr,1); res.accZ_s_tr = NaN(N_tr,1);
+            res.full_tr_ok = false;
         end
-        res.full_tr_ok = true;
-    catch
+    else
         res.accX_s_tr = NaN(N_tr,1); res.accY_s_tr = NaN(N_tr,1); res.accZ_s_tr = NaN(N_tr,1);
         res.full_tr_ok = false;
     end
 
-    const_trans_vl = constants_sim;
-    const_trans_vl.mode = 'translational';
-    const_trans_vl.measured_data.time  = time_vl;
-    const_trans_vl.measured_data.p     = pqr_vl(:,1);
-    const_trans_vl.measured_data.q     = pqr_vl(:,2);
-    const_trans_vl.measured_data.r     = pqr_vl(:,3);
-    const_trans_vl.measured_data.phi   = deg2rad(att_vl(:,1));
-    const_trans_vl.measured_data.theta = deg2rad(att_vl(:,2));
-    const_trans_vl.measured_data.psi   = deg2rad(att_vl(:,3));
+    if res.pqr_vl_ok
+        const_trans_vl = constants_sim;
+        const_trans_vl.mode = 'translational';
+        const_trans_vl.measured_data.time  = time_vl;
+        const_trans_vl.measured_data.p     = res.p_s_vl;   % SIMULADO
+        const_trans_vl.measured_data.q     = res.q_s_vl;   % SIMULADO
+        const_trans_vl.measured_data.r     = res.r_s_vl;   % SIMULADO
+        const_trans_vl.measured_data.phi   = deg2rad(att_vl(:,1));
+        const_trans_vl.measured_data.theta = deg2rad(att_vl(:,2));
+        const_trans_vl.measured_data.psi   = deg2rad(att_vl(:,3));
 
-    try
-        ode_v = @(t,y) vtol_dynamics(t, y, P, time_vl, pwm_vl, func_T_ref, func_Q_ref, const_trans_vl);
-        [t_s, y_s] = ode45(ode_v, time_vl, [0;0;0], ode_opts);
-        uvw = interp1(t_s, y_s, time_vl, 'linear', 'extrap');
-        res.accX_s_vl = zeros(N_vl,1); res.accY_s_vl = zeros(N_vl,1); res.accZ_s_vl = zeros(N_vl,1);
-        phi_vl_rad = const_trans_vl.measured_data.phi;
-        theta_vl_rad = const_trans_vl.measured_data.theta;
-        for k = 1:N_vl
-            dy = vtol_dynamics(time_vl(k), uvw(k,:)', P, time_vl, pwm_vl, func_T_ref, func_Q_ref, const_trans_vl);
-            gx_k = -constants_sim.g * sin(theta_vl_rad(k));
-            gy_k =  constants_sim.g * cos(theta_vl_rad(k)) * sin(phi_vl_rad(k));
-            gz_k =  constants_sim.g * cos(theta_vl_rad(k)) * cos(phi_vl_rad(k));
-            res.accX_s_vl(k) = dy(1) - gx_k;
-            res.accY_s_vl(k) = dy(2) - gy_k;
-            res.accZ_s_vl(k) = dy(3) - gz_k;
+        try
+            ode_v = @(t,y) vtol_dynamics(t, y, P, time_vl, pwm_vl, func_T_ref, func_Q_ref, const_trans_vl);
+            [t_s, y_s] = ode45(ode_v, time_vl, [0;0;0], ode_opts);
+            uvw = interp1(t_s, y_s, time_vl, 'linear', 'extrap');
+            res.accX_s_vl = zeros(N_vl,1); res.accY_s_vl = zeros(N_vl,1); res.accZ_s_vl = zeros(N_vl,1);
+            phi_vl_rad = const_trans_vl.measured_data.phi;
+            theta_vl_rad = const_trans_vl.measured_data.theta;
+            for k = 1:N_vl
+                dy = vtol_dynamics(time_vl(k), uvw(k,:)', P, time_vl, pwm_vl, func_T_ref, func_Q_ref, const_trans_vl);
+                gx_k = -constants_sim.g * sin(theta_vl_rad(k));
+                gy_k =  constants_sim.g * cos(theta_vl_rad(k)) * sin(phi_vl_rad(k));
+                gz_k =  constants_sim.g * cos(theta_vl_rad(k)) * cos(phi_vl_rad(k));
+                res.accX_s_vl(k) = dy(1) - gx_k;
+                res.accY_s_vl(k) = dy(2) - gy_k;
+                res.accZ_s_vl(k) = dy(3) - gz_k;
+            end
+            res.full_vl_ok = true;
+        catch
+            res.accX_s_vl = NaN(N_vl,1); res.accY_s_vl = NaN(N_vl,1); res.accZ_s_vl = NaN(N_vl,1);
+            res.full_vl_ok = false;
         end
-        res.full_vl_ok = true;
-    catch
+    else
         res.accX_s_vl = NaN(N_vl,1); res.accY_s_vl = NaN(N_vl,1); res.accZ_s_vl = NaN(N_vl,1);
         res.full_vl_ok = false;
     end
@@ -753,4 +741,100 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     fprintf('    Mx: min=%.4f  max=%.4f  std=%.4f\n', min(Mx), max(Mx), std(Mx));
     fprintf('    My: min=%.4f  max=%.4f  std=%.4f\n', min(My), max(My), std(My));
     fprintf('    Mz: min=%.4f  max=%.4f  std=%.4f\n', min(Mz), max(Mz), std(Mz));
+end
+
+function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val)
+    k_T = P(5:8);
+    Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
+    m = constants_sim.m;
+    g = constants_sim.g;
+    N_vl = length(time_vl);
+
+    % Atitude em radianos
+    phi   = deg2rad(att_vl(:,1));
+    theta = deg2rad(att_vl(:,2));
+
+    % Empuxo individual e total
+    Ti = zeros(N_vl, 4);
+    for j = 1:4
+        Ti(:,j) = k_T(j) * func_T_ref(pwm_vl(:,j));
+    end
+    T_total = sum(Ti, 2);
+
+    % Componentes da gravidade no body frame (por unidade de massa)
+    gx = -g * sin(theta);
+    gy =  g * cos(theta) .* sin(phi);
+    gz =  g * cos(theta) .* cos(phi);
+
+    % Forças por unidade de massa (acelerações)
+    Fx_m = gx;                     % gravidade x
+    Fy_m = gy;                     % gravidade y
+    Fz_m = -T_total/m + gz;       % thrust + gravidade z
+
+    % Referência: acelerômetro medido (força específica = acc_inercial - gravidade)
+    % acc_IMU_x = u_dot - gx = (r*v - q*w + gx + Xu*u) - gx = r*v - q*w + Xu*u
+    % Então: u_dot = acc_IMU_x + gx, e Fx/m = u_dot - (r*v - q*w) - Xu*u
+    % Simplificando: Fx/m contribui com gx para u_dot
+
+    fig4 = figure('Name', 'Forças Translacionais', 'Position', [80 50 1000 900], 'Visible', 'off');
+
+    % --- Subplot 1: Empuxo total vs peso ---
+    subplot(4,1,1);
+    plot(time_vl, T_total, 'r-', 'LineWidth', 1.3);
+    hold on;
+    yline(m*g, 'k--', 'LineWidth', 1.2);
+    hold off;
+    legend('T_{total}', sprintf('mg = %.2f N', m*g));
+    ylabel('Força (N)'); grid on;
+    title(sprintf('Empuxo total vs Peso  (T_{med}=%.2f N, mg=%.2f N, ratio=%.3f)', ...
+        mean(T_total), m*g, mean(T_total)/(m*g)));
+
+    % --- Subplot 2: Fx/m (gravidade x) vs AccX medido ---
+    subplot(4,1,2);
+    plot(time_vl, Fx_m, 'r-', 'LineWidth', 1.3);
+    hold on;
+    plot(time_vl, acc_vl(:,1), 'b-', 'LineWidth', 0.8);
+    % acc_IMU_x = u_dot - gx, então u_dot = acc_IMU + gx
+    plot(time_vl, acc_vl(:,1) + gx, 'g--', 'LineWidth', 1.0);
+    hold off;
+    legend('gx = -g sin\theta', 'AccX_{IMU} (f. esp.)', 'u_{dot} = AccX+gx');
+    ylabel('m/s^2'); grid on;
+    title('Eixo X: gravidade vs medido');
+
+    % --- Subplot 3: Fy/m (gravidade y) vs AccY medido ---
+    subplot(4,1,3);
+    plot(time_vl, Fy_m, 'r-', 'LineWidth', 1.3);
+    hold on;
+    plot(time_vl, acc_vl(:,2), 'b-', 'LineWidth', 0.8);
+    plot(time_vl, acc_vl(:,2) + gy, 'g--', 'LineWidth', 1.0);
+    hold off;
+    legend('gy = g cos\theta sin\phi', 'AccY_{IMU} (f. esp.)', 'v_{dot} = AccY+gy');
+    ylabel('m/s^2'); grid on;
+    title('Eixo Y: gravidade vs medido');
+
+    % --- Subplot 4: Fz/m (thrust + grav z) vs AccZ medido ---
+    subplot(4,1,4);
+    plot(time_vl, Fz_m, 'r-', 'LineWidth', 1.3);
+    hold on;
+    plot(time_vl, acc_vl(:,3), 'b-', 'LineWidth', 0.8);
+    plot(time_vl, acc_vl(:,3) + gz, 'g--', 'LineWidth', 1.0);
+    yline(-g, 'k:', 'LineWidth', 1);
+    hold off;
+    legend('Fz/m = -T/m + gz', 'AccZ_{IMU} (f. esp.)', 'w_{dot} = AccZ+gz', '-g');
+    ylabel('m/s^2'); xlabel('Tempo (s)'); grid on;
+    title(sprintf('Eixo Z: thrust+grav vs medido  (Bz=%.3f, Zw=%.3f)', Bz, Zw_m));
+
+    sgtitle(sprintf('Forças Translacionais — Validação [%d-%ds]  (m=%.1f kg)', t_val(1), t_val(2), m));
+    saveas(fig4, fullfile('C:/Users/Henrique/ARTIGO/identification/images', 'forcas_validacao.png'));
+
+    % Estatísticas
+    fprintf('\n  --- Forças (validação) ---\n');
+    fprintf('    T_total: média=%.3f N  (mg=%.3f N, ratio=%.4f)\n', mean(T_total), m*g, mean(T_total)/(m*g));
+    fprintf('    Ti médios: [%.2f, %.2f, %.2f, %.2f] N\n', mean(Ti(:,1)), mean(Ti(:,2)), mean(Ti(:,3)), mean(Ti(:,4)));
+    fprintf('    gx: média=%.4f  std=%.4f  (esperado ~0 em hover)\n', mean(gx), std(gx));
+    fprintf('    gy: média=%.4f  std=%.4f  (esperado ~0 em hover)\n', mean(gy), std(gy));
+    fprintf('    gz: média=%.4f  std=%.4f  (esperado ~g em hover)\n', mean(gz), std(gz));
+    fprintf('    Fz/m média=%.4f  (esperado ~0 em hover: -T/m+gz ~0)\n', mean(Fz_m));
+    fprintf('    AccZ_IMU média=%.4f  (esperado ~-g em hover)\n', mean(acc_vl(:,3)));
+    fprintf('    Xu_m=%.4f  Yv_m=%.4f  Zw_m=%.4f  Bz=%.4f\n', Xu_m, Yv_m, Zw_m, Bz);
 end
