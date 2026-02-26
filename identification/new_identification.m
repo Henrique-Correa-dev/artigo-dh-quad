@@ -342,7 +342,7 @@ plot_all_results('P_final', ...
 plot_torques(P_final, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val);
 
 % Diagnóstico: Forças Fx, Fy, Fz na janela de validação
-plot_forces(P_final, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val);
+plot_forces(P_final, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val, res_final);
 
 %% 10. RESUMO FINAL: P0 vs P_final (apenas validação)
 fprintf('\n==========================================================\n');
@@ -436,8 +436,9 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
     Ly_f = 0.311185 - dx_cg; % frente (motores 1,3)
     Ly_r = 0.342865 + dx_cg; % traseira (motores 2,4)
 
-    n_sub = 10;
+    n_sub = 5;
     dt_sub = dt / n_sub;
+    h2 = dt_sub / 2;
     MAX_VAL = 50;
 
     p_sim = zeros(N, 1);
@@ -458,12 +459,30 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
             Mz = Qmr(1) + Qmr(2) - Qmr(3) - Qmr(4);
 
             for si = 1:n_sub
-                pd = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps + Bp;
-                qd = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs + Bq;
-                rd = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs + Br;
-                ps = ps + dt_sub*pd;
-                qs = qs + dt_sub*qd;
-                rs = rs + dt_sub*rd;
+                % RK4 sub-stepping (Mx, My, Mz constantes no sub-step)
+                % k1
+                pd1 = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps + Bp;
+                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs + Bq;
+                rd1 = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs + Br;
+                % k2
+                p2 = ps+h2*pd1; q2 = qs+h2*qd1; r2 = rs+h2*rd1;
+                pd2 = G1*p2*q2 - G2*q2*r2 + G3*Mx + G4*Mz - Dp*p2 + Bp;
+                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*My - Dq*q2 + Bq;
+                rd2 = G7*p2*q2 - G1*q2*r2 + G4*Mx + G8*Mz - Dr*r2 + Br;
+                % k3
+                p3 = ps+h2*pd2; q3 = qs+h2*qd2; r3 = rs+h2*rd2;
+                pd3 = G1*p3*q3 - G2*q3*r3 + G3*Mx + G4*Mz - Dp*p3 + Bp;
+                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*My - Dq*q3 + Bq;
+                rd3 = G7*p3*q3 - G1*q3*r3 + G4*Mx + G8*Mz - Dr*r3 + Br;
+                % k4
+                p4 = ps+dt_sub*pd3; q4 = qs+dt_sub*qd3; r4 = rs+dt_sub*rd3;
+                pd4 = G1*p4*q4 - G2*q4*r4 + G3*Mx + G4*Mz - Dp*p4 + Bp;
+                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*My - Dq*q4 + Bq;
+                rd4 = G7*p4*q4 - G1*q4*r4 + G4*Mx + G8*Mz - Dr*r4 + Br;
+                % update
+                ps = ps + dt_sub/6*(pd1 + 2*pd2 + 2*pd3 + pd4);
+                qs = qs + dt_sub/6*(qd1 + 2*qd2 + 2*qd3 + qd4);
+                rs = rs + dt_sub/6*(rd1 + 2*rd2 + 2*rd3 + rd4);
             end
 
             if ~isfinite(ps), ps = MAX_VAL; end
@@ -743,7 +762,7 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     fprintf('    Mz: min=%.4f  max=%.4f  std=%.4f\n', min(Mz), max(Mz), std(Mz));
 end
 
-function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val)
+function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val, res)
     k_T = P(5:8);
     Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
     m = constants_sim.m;
@@ -767,15 +786,11 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     gz =  g * cos(theta) .* cos(phi);
 
     % Forças por unidade de massa (acelerações)
-    Fx_m = gx;                     % gravidade x
-    Fy_m = gy;                     % gravidade y
     Fz_m = -T_total/m + gz;       % thrust + gravidade z
 
-    % Referência: acelerômetro medido (força específica = acc_inercial - gravidade)
-    % acc_IMU_x = u_dot - gx = (r*v - q*w + gx + Xu*u) - gx = r*v - q*w + Xu*u
-    % Então: u_dot = acc_IMU_x + gx, e Fx/m = u_dot - (r*v - q*w) - Xu*u
-    % Simplificando: Fx/m contribui com gx para u_dot
-
+    % =====================================================================
+    %  Figura 1: Forças translacionais com modelo simulado
+    % =====================================================================
     fig4 = figure('Name', 'Forças Translacionais', 'Position', [80 50 1000 900], 'Visible', 'off');
 
     % --- Subplot 1: Empuxo total vs peso ---
@@ -789,52 +804,155 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     title(sprintf('Empuxo total vs Peso  (T_{med}=%.2f N, mg=%.2f N, ratio=%.3f)', ...
         mean(T_total), m*g, mean(T_total)/(m*g)));
 
-    % --- Subplot 2: Fx/m (gravidade x) vs AccX medido ---
+    % --- Subplot 2: AccX medido vs simulado ---
     subplot(4,1,2);
-    plot(time_vl, Fx_m, 'r-', 'LineWidth', 1.3);
+    plot(time_vl, acc_vl(:,1), 'b-', 'LineWidth', 1.0);
     hold on;
-    plot(time_vl, acc_vl(:,1), 'b-', 'LineWidth', 0.8);
-    % acc_IMU_x = u_dot - gx, então u_dot = acc_IMU + gx
-    plot(time_vl, acc_vl(:,1) + gx, 'g--', 'LineWidth', 1.0);
+    if res.full_vl_ok
+        plot(time_vl, res.accX_s_vl, 'r--', 'LineWidth', 1.3);
+    end
+    plot(time_vl, gx, 'k:', 'LineWidth', 0.8);
     hold off;
-    legend('gx = -g sin\theta', 'AccX_{IMU} (f. esp.)', 'u_{dot} = AccX+gx');
+    if res.full_vl_ok
+        legend('AccX_{IMU} (medido)', 'AccX_{modelo}', 'gx = -g sin\theta');
+    else
+        legend('AccX_{IMU} (medido)', 'gx = -g sin\theta');
+    end
     ylabel('m/s^2'); grid on;
-    title('Eixo X: gravidade vs medido');
+    title('Eixo X: força específica medida vs modelo');
 
-    % --- Subplot 3: Fy/m (gravidade y) vs AccY medido ---
+    % --- Subplot 3: AccY medido vs simulado ---
     subplot(4,1,3);
-    plot(time_vl, Fy_m, 'r-', 'LineWidth', 1.3);
+    plot(time_vl, acc_vl(:,2), 'b-', 'LineWidth', 1.0);
     hold on;
-    plot(time_vl, acc_vl(:,2), 'b-', 'LineWidth', 0.8);
-    plot(time_vl, acc_vl(:,2) + gy, 'g--', 'LineWidth', 1.0);
+    if res.full_vl_ok
+        plot(time_vl, res.accY_s_vl, 'r--', 'LineWidth', 1.3);
+    end
+    plot(time_vl, gy, 'k:', 'LineWidth', 0.8);
     hold off;
-    legend('gy = g cos\theta sin\phi', 'AccY_{IMU} (f. esp.)', 'v_{dot} = AccY+gy');
+    if res.full_vl_ok
+        legend('AccY_{IMU} (medido)', 'AccY_{modelo}', 'gy = g cos\theta sin\phi');
+    else
+        legend('AccY_{IMU} (medido)', 'gy = g cos\theta sin\phi');
+    end
     ylabel('m/s^2'); grid on;
-    title('Eixo Y: gravidade vs medido');
+    title('Eixo Y: força específica medida vs modelo');
 
-    % --- Subplot 4: Fz/m (thrust + grav z) vs AccZ medido ---
+    % --- Subplot 4: AccZ medido vs simulado ---
     subplot(4,1,4);
-    plot(time_vl, Fz_m, 'r-', 'LineWidth', 1.3);
+    plot(time_vl, acc_vl(:,3), 'b-', 'LineWidth', 1.0);
     hold on;
-    plot(time_vl, acc_vl(:,3), 'b-', 'LineWidth', 0.8);
-    plot(time_vl, acc_vl(:,3) + gz, 'g--', 'LineWidth', 1.0);
-    yline(-g, 'k:', 'LineWidth', 1);
+    if res.full_vl_ok
+        plot(time_vl, res.accZ_s_vl, 'r--', 'LineWidth', 1.3);
+    end
+    plot(time_vl, Fz_m, 'k:', 'LineWidth', 0.8);
+    yline(-g, 'k--', 'LineWidth', 0.6);
     hold off;
-    legend('Fz/m = -T/m + gz', 'AccZ_{IMU} (f. esp.)', 'w_{dot} = AccZ+gz', '-g');
+    if res.full_vl_ok
+        legend('AccZ_{IMU} (medido)', 'AccZ_{modelo}', 'Fz/m = -T/m+gz', '-g');
+    else
+        legend('AccZ_{IMU} (medido)', 'Fz/m = -T/m+gz', '-g');
+    end
     ylabel('m/s^2'); xlabel('Tempo (s)'); grid on;
-    title(sprintf('Eixo Z: thrust+grav vs medido  (Bz=%.3f, Zw=%.3f)', Bz, Zw_m));
+    title(sprintf('Eixo Z: força específica medida vs modelo  (Bz=%.3f, Zw=%.3f)', Bz, Zw_m));
 
     sgtitle(sprintf('Forças Translacionais — Validação [%d-%ds]  (m=%.1f kg)', t_val(1), t_val(2), m));
     saveas(fig4, fullfile('C:/Users/Henrique/ARTIGO/identification/images', 'forcas_validacao.png'));
+
+    % =====================================================================
+    %  Figura 2: Análise dos PWMs por motor
+    % =====================================================================
+    fig5 = figure('Name', 'Análise PWM', 'Position', [100 50 1000 700], 'Visible', 'off');
+
+    % Subplot 1: PWM de cada motor ao longo do tempo
+    subplot(3,1,1);
+    plot(time_vl, pwm_vl(:,1), 'r-', 'LineWidth', 1.0); hold on;
+    plot(time_vl, pwm_vl(:,2), 'b-', 'LineWidth', 1.0);
+    plot(time_vl, pwm_vl(:,3), 'g-', 'LineWidth', 1.0);
+    plot(time_vl, pwm_vl(:,4), 'm-', 'LineWidth', 1.0);
+    hold off;
+    legend('M1 (FR,CW)', 'M2 (RL,CW)', 'M3 (FL,CCW)', 'M4 (RR,CCW)');
+    ylabel('PWM (\mus)'); grid on;
+    title('PWM por motor');
+
+    % Subplot 2: Empuxo individual (com k_T)
+    subplot(3,1,2);
+    plot(time_vl, Ti(:,1), 'r-', 'LineWidth', 1.0); hold on;
+    plot(time_vl, Ti(:,2), 'b-', 'LineWidth', 1.0);
+    plot(time_vl, Ti(:,3), 'g-', 'LineWidth', 1.0);
+    plot(time_vl, Ti(:,4), 'm-', 'LineWidth', 1.0);
+    yline(m*g/4, 'k--', 'LineWidth', 1.0);
+    hold off;
+    legend(sprintf('T1 (k_T=%.3f)', k_T(1)), sprintf('T2 (k_T=%.3f)', k_T(2)), ...
+           sprintf('T3 (k_T=%.3f)', k_T(3)), sprintf('T4 (k_T=%.3f)', k_T(4)), 'mg/4');
+    ylabel('Empuxo (N)'); grid on;
+    title('Empuxo por motor (T_i = k_{Ti} \cdot T_{ref}(PWM_i))');
+
+    % Subplot 3: T_ref cru (sem k_T) — para ver o que o FC realmente comanda
+    T_ref_raw = zeros(N_vl, 4);
+    for j = 1:4
+        T_ref_raw(:,j) = func_T_ref(pwm_vl(:,j));
+    end
+    subplot(3,1,3);
+    plot(time_vl, T_ref_raw(:,1), 'r-', 'LineWidth', 1.0); hold on;
+    plot(time_vl, T_ref_raw(:,2), 'b-', 'LineWidth', 1.0);
+    plot(time_vl, T_ref_raw(:,3), 'g-', 'LineWidth', 1.0);
+    plot(time_vl, T_ref_raw(:,4), 'm-', 'LineWidth', 1.0);
+    yline(m*g/4, 'k--', 'LineWidth', 1.0);
+    hold off;
+    T_ref_total = sum(T_ref_raw, 2);
+    legend(sprintf('T_{ref1} (med=%.2f)', mean(T_ref_raw(:,1))), ...
+           sprintf('T_{ref2} (med=%.2f)', mean(T_ref_raw(:,2))), ...
+           sprintf('T_{ref3} (med=%.2f)', mean(T_ref_raw(:,3))), ...
+           sprintf('T_{ref4} (med=%.2f)', mean(T_ref_raw(:,4))), 'mg/4');
+    ylabel('Empuxo ref (N)'); xlabel('Tempo (s)'); grid on;
+    title(sprintf('T_{ref}(PWM) cru (sem k_T) — Total medio=%.2f N vs mg=%.2f N, ratio=%.3f', ...
+        mean(T_ref_total), m*g, mean(T_ref_total)/(m*g)));
+
+    sgtitle(sprintf('Análise PWM e Empuxo — Validação [%d-%ds]', t_val(1), t_val(2)));
+    saveas(fig5, fullfile('C:/Users/Henrique/ARTIGO/identification/images', 'pwm_analise.png'));
 
     % Estatísticas
     fprintf('\n  --- Forças (validação) ---\n');
     fprintf('    T_total: média=%.3f N  (mg=%.3f N, ratio=%.4f)\n', mean(T_total), m*g, mean(T_total)/(m*g));
     fprintf('    Ti médios: [%.2f, %.2f, %.2f, %.2f] N\n', mean(Ti(:,1)), mean(Ti(:,2)), mean(Ti(:,3)), mean(Ti(:,4)));
-    fprintf('    gx: média=%.4f  std=%.4f  (esperado ~0 em hover)\n', mean(gx), std(gx));
-    fprintf('    gy: média=%.4f  std=%.4f  (esperado ~0 em hover)\n', mean(gy), std(gy));
-    fprintf('    gz: média=%.4f  std=%.4f  (esperado ~g em hover)\n', mean(gz), std(gz));
+    fprintf('    T_ref cru (sem k_T): [%.2f, %.2f, %.2f, %.2f] N  (total=%.2f)\n', ...
+        mean(T_ref_raw(:,1)), mean(T_ref_raw(:,2)), mean(T_ref_raw(:,3)), mean(T_ref_raw(:,4)), mean(T_ref_total));
+    fprintf('    PWM médios: [%.0f, %.0f, %.0f, %.0f] us\n', mean(pwm_vl(:,1)), mean(pwm_vl(:,2)), mean(pwm_vl(:,3)), mean(pwm_vl(:,4)));
+    fprintf('    PWM std:    [%.1f, %.1f, %.1f, %.1f] us\n', std(pwm_vl(:,1)), std(pwm_vl(:,2)), std(pwm_vl(:,3)), std(pwm_vl(:,4)));
     fprintf('    Fz/m média=%.4f  (esperado ~0 em hover: -T/m+gz ~0)\n', mean(Fz_m));
-    fprintf('    AccZ_IMU média=%.4f  (esperado ~-g em hover)\n', mean(acc_vl(:,3)));
     fprintf('    Xu_m=%.4f  Yv_m=%.4f  Zw_m=%.4f  Bz=%.4f\n', Xu_m, Yv_m, Zw_m, Bz);
+
+    % Análise: assimetria constante (CG/motor) vs variável (vento)
+    fprintf('\n  --- Análise de assimetria PWM ---\n');
+    pwm_mean = mean(pwm_vl);
+    pwm_std  = std(pwm_vl);
+    cv = pwm_std ./ pwm_mean * 100;  % coeficiente de variação (%)
+    fprintf('    Coeficiente de variação PWM: [%.1f%%, %.1f%%, %.1f%%, %.1f%%]\n', cv(1), cv(2), cv(3), cv(4));
+    fprintf('    (CV baixo = patamar constante → diferença CG/motor)\n');
+    fprintf('    (CV alto  = variação temporal → vento/perturbação)\n');
+
+    % Assimetria roll: (M1+M4) vs (M2+M3)
+    pwm_right = pwm_vl(:,1) + pwm_vl(:,4);  % motores direita
+    pwm_left  = pwm_vl(:,2) + pwm_vl(:,3);  % motores esquerda
+    roll_asym = pwm_right - pwm_left;
+    fprintf('    Assimetria roll (dir-esq): média=%.1f us  std=%.1f us\n', mean(roll_asym), std(roll_asym));
+
+    % Assimetria pitch: (M1+M3) vs (M2+M4)
+    pwm_front = pwm_vl(:,1) + pwm_vl(:,3);  % motores frente
+    pwm_rear  = pwm_vl(:,2) + pwm_vl(:,4);  % motores traseira
+    pitch_asym = pwm_front - pwm_rear;
+    fprintf('    Assimetria pitch (frente-trás): média=%.1f us  std=%.1f us\n', mean(pitch_asym), std(pitch_asym));
+
+    % Assimetria yaw: (M1+M2) CW vs (M3+M4) CCW
+    pwm_cw  = pwm_vl(:,1) + pwm_vl(:,2);
+    pwm_ccw = pwm_vl(:,3) + pwm_vl(:,4);
+    yaw_asym = pwm_cw - pwm_ccw;
+    fprintf('    Assimetria yaw (CW-CCW): média=%.1f us  std=%.1f us\n', mean(yaw_asym), std(yaw_asym));
+
+    if mean(abs(std(roll_asym))) < 5 && mean(abs(std(pitch_asym))) < 5
+        fprintf('    → Assimetrias ESTÁVEIS: predomina CG offset / diferença de motores\n');
+    else
+        fprintf('    → Assimetrias VARIÁVEIS: predomina vento / perturbação externa\n');
+    end
 end
