@@ -4,29 +4,43 @@
 \catcode `"\active 
 \babel@aux{portuguese}{}
 \@writefile{toc}{\contentsline {section}{\numberline {I}INTRODUÇÃO}{1}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Ilustração das etapas de voo de um VTOL}}{1}{}\protected@file@percent }
-\newlabel{anomalias}{{1}{1}{}{figure.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Ilustração das etapas de voo de um VTOL híbrido.}}{1}{}\protected@file@percent }
+\newlabel{fig:fases_voo}{{1}{1}{}{figure.1}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Diagrama do método M4M}}{1}{}\protected@file@percent }
 \newlabel{unet}{{2}{1}{}{figure.2}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {II}Método M4M de Identificação}{1}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Representação Drone e Motores}}{2}{}\protected@file@percent }
-\newlabel{unet3}{{3}{2}{}{figure.3}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {III}Modelo Matemático do UAV VTOL}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {IV}Modelo do Quadrirotor}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {V}Otimização por Mínimos Quadrados Não-Lineares}{2}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Dados de Identificação}}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VI}Metodologia}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {VI-A}Manobras e Dados para Identificação}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {VI-B}Constantes Iniciais}{3}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Parâmetros físicos e de voo do VANT.}}{4}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Simulação via Simulink do Modelo}}{4}{}\protected@file@percent }
-\newlabel{decoder}{{5}{4}{}{figure.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {VI-C}Simulação Dinâmica do Modelo}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VII}RESULTADO E DISCUSSÕES}{4}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Validação da Identificação}}{4}{}\protected@file@percent }
-\newlabel{loss}{{6}{4}{}{figure.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {VII-A}Resultado da Estimação dos Parâmetros}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {VII-B}Validação}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Configuração da aeronave e disposição dos motores.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone_config}{{3}{2}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Modelo Matemático do Modo Quadricóptero}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Aeronave DH Hybrid-Drone VTOL.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone_real}{{4}{2}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-.1}Modelo de Empuxo e Torque dos Motores}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Curvas de empuxo e torque reativo em função do PWM, obtidas por caracterização em bancada. Os pontos representam os dados experimentais e a linha contínua é o ajuste polinomial de terceiro grau.}}{3}{}\protected@file@percent }
+\newlabel{fig:bench_motor}{{5}{3}{}{figure.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-.2}Coeficientes Aerodinâmicos de Arrasto}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-.3}Tensor de Inércia}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {III-.4}Constantes de Inércia $\Gamma _i$}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {III-A}Forças e Momentos de Propulsão}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Estimação de Parâmetros}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Fluxo iterativo da estima\c {c}\~ao de par\^ametros. O vetor de res\'iduos $f(\Theta )$ (Eq.~22) \'e fornecido ao \texttt  {lsqnonlin}, que calcula internamente a Jacobiana (Eq.~24) e o passo $\delta _k$ (Eq.~25). Ap\'os converg\^encia, o ajuste \'e avaliado por $R^2$ (Eq.~26).}}{4}{}\protected@file@percent }
+\newlabel{fig:opt_loop}{{6}{4}{}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV-A}Método de Erro de Saída com Multijanelas}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Metodologia}{5}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Diagrama do processo de identifica\c {c}\~ao por OEM com multijanelas progressivas. Os segmentos de treino alimentam a Fase~A (EEM alg\'ebrico) e a Fase~B (OEM com janelas de dura\c {c}\~ao crescente). O melhor conjunto de par\^ametros \'e selecionado com base no $R^2$ do segmento de valida\c {c}\~ao.}}{5}{}\protected@file@percent }
+\newlabel{fig:oem_diagram}{{7}{5}{}{figure.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {V-A}Manobras e Dados para Identificação}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {V-B}Constantes Iniciais}{5}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Dados de Identificação}}{6}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Parâmetros físicos e de voo do VANT.}}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {V-C}Simulação Dinâmica do Modelo}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}RESULTADO E DISCUSSÕES}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI-A}Resultado da Estimação dos Parâmetros}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Diagrama de blocos do modelo din\^amico do VANT. As entradas PWM alimentam os modelos de empuxo e torque. Linhas tracejadas indicam sinais que alimentam a din\^amica translacional.}}{6}{}\protected@file@percent }
+\newlabel{fig:model_diagram}{{9}{6}{}{figure.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Velocidades angulares -- resultado final da identifica\c {c}\~ao}}{6}{}\protected@file@percent }
+\newlabel{fig:pqr_val}{{10}{6}{}{figure.10}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Acelera\c {c}\~oes (for\c {c}a espec\'ifica) -- resultado final da identifica\c {c}\~ao}}{6}{}\protected@file@percent }
+\newlabel{fig:acc_val}{{11}{6}{}{figure.11}{}}
 \bibcite{c1}{1}
 \bibcite{c2}{2}
 \bibcite{c3}{3}
@@ -39,7 +53,15 @@
 \bibcite{c10}{10}
 \bibcite{c11}{11}
 \bibcite{c12}{12}
-\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Parâmetros estimados.}}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VIII}CONCLUSÃO}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{5}{}\protected@file@percent }
-\gdef \@abspage@last{5}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Momentos e produtos de in\'ercia estimados.}}{7}{}\protected@file@percent }
+\newlabel{tab:param_inercia}{{II}{7}{}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Fatores de escala de empuxo e torque dos motores.}}{7}{}\protected@file@percent }
+\newlabel{tab:param_motor}{{III}{7}{}{table.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Coeficientes de amortecimento e bias rotacionais.}}{7}{}\protected@file@percent }
+\newlabel{tab:param_rot}{{IV}{7}{}{table.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Coeficientes aerodin\^amicos translacionais.}}{7}{}\protected@file@percent }
+\newlabel{tab:param_trans}{{V}{7}{}{table.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI-B}Validação}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VII}CONCLUSÃO}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{7}{}\protected@file@percent }
+\gdef \@abspage@last{7}

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(matlab -batch \"cd\\(''C:/Users/Henrique/ARTIGO/identification''\\); new_identification\")"
+      "Bash(matlab -batch \"cd\\(''C:/Users/Henrique/ARTIGO/identification''\\); new_identification\")",
+      "Bash(find C:\\\\Users\\\\Henrique\\\\ARTIGO -name \"*.m\" -exec grep -l \"cost_function_vtol\" {} ;)",
+      "Bash(pdflatex -interaction=nonstopmode main.tex)"
     ]
   }
 }

@@ -30,6 +30,8 @@
 %\usepackage{mathptmx} % assumes new font selection scheme installed
 %\usepackage{times} % assumes new font selection scheme installed
 \usepackage{amsmath} % assumes amsmath package installed
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
 \usepackage[portuguese]{babel}
 \addto\captionsportuguese{\renewcommand{\abstractname}{Abstract}}
 \addto\captionsportuguese{\renewcommand{\refname}{References}}
@@ -45,8 +47,14 @@ Identificação de Sistema e Modelagem de um Veículo Aéreo Não Tripulado (VAN
 \\
 \textit{Departamento de Engenharia Eletrônica (IEE)} \\
 \textit{Instituto Tecnológico de Aeronáutica (ITA)} \\
-São josé dos Campos, Brazil \\
+São José dos Campos, Brazil \\
 \tt\small henriquecorrea@ita.br
+\and
+$2^{nd}$ Neusa Maria Franco de Oliveira, Ph.D.\\
+\textit{Departamento de Engenharia Eletrônica (IEE)} \\
+\textit{Instituto Tecnológico de Aeronáutica (ITA)} \\
+São José dos Campos, Brazil \\
+\tt\small neusa@ita.br
 }
 
 \begin{document}
@@ -57,27 +65,27 @@ São josé dos Campos, Brazil \\
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-O presente trabalho descreve o desenvolvimento, a identificação de sistema e a validação de um modelo matemático não-linear para um Veículo Aéreo Não Tripulado (VANT) de decolagem e pouso vertical (VTOL) de configuração híbrida. O objetivo principal deste estudo é obter um modelo de alta fidelidade que descreva a dinâmica completa da aeronave, servindo como base para o desenvolvimento de algoritmos de controle e simulação para um piloto automático. A metodologia de identificação de sistemas M4M (Maneuver, Measurements, Methods, Models) foi aplicada, utilizando dados coletados em voos reais. Para estimar os parâmetros de inércia e os coeficientes aerodinâmicos do modelo, empregou-se um método de otimização por mínimos quadrados não-lineares, uma técnica no domínio do tempo que minimiza o erro entre a resposta simulada e os dados medidos em manobras de voo que excitaram os modos da aeronave. O modelo matemático final foi validado ao se comparar suas respostas simuladas com um conjunto distinto de dados de voo, não utilizado na estimação. Os resultados obtidos demonstram uma excelente correlação entre os dados reais e simulados, confirmando a precisão e a robustez do modelo identificado.
+O presente trabalho descreve a identificação de sistema e a validação de um modelo matemático não-linear para o modo de voo quadricóptero de um Veículo Aéreo Não Tripulado (VANT) VTOL de configuração híbrida. O objetivo principal é obter um modelo identificado do modo quadricóptero que sirva como base para o desenvolvimento de algoritmos de controle e de um piloto automático (PA) para as fases de decolagem e pouso vertical. A metodologia de identificação de sistemas M4M (Maneuver, Measurements, Methods, Models) foi aplicada, utilizando dados coletados em voos reais. Para estimar os parâmetros de inércia e os coeficientes aerodinâmicos, empregou-se um método de otimização por mínimos quadrados não-lineares no domínio do tempo, que minimiza o erro entre a resposta simulada e os dados medidos em manobras que excitaram os modos da aeronave. O modelo identificado foi validado comparando-se suas respostas com um conjunto distinto de dados de voo não utilizado na estimação. Os resultados demonstram boa correlação entre os dados reais e simulados, confirmando a adequação do modelo para as aplicações de controle pretendidas.
 
-\textit{Keywords—} VTOL, Identificação de Sistemas, Mínimos Quadrados Não-Lineares
+\textit{Keywords—} VTOL, Identificação de Sistemas, Quadricóptero, OEM
 \end{abstract}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{INTRODUÇÃO}
 
-Veículos aéreos não tripulados (VANTs) com capacidade de decolagem e pouso vertical (VTOL, do inglês Vertical Take-off and Landing) têm ganhado destaque devido à sua versatilidade, combinando a eficiência de voo de uma aeronave de asa fixa com a flexibilidade de um multirotor [1]. Este trabalho foca no desenvolvimento de um modelo matemático para um VANT VTOL híbrido, o DH Hybrid-Drone VTOL v1, que transita entre o modo de voo multirotor e o modo de voo de asa fixa.
+Veículos aéreos não tripulados (VANTs) com capacidade de decolagem e pouso vertical (VTOL, do inglês \textit{Vertical Take-off and Landing}) têm ganhado destaque devido à sua versatilidade, combinando a eficiência de cruzeiro de uma aeronave de asa fixa com a flexibilidade operacional de um multirotor [1]. A aeronave objeto deste estudo, o DH Hybrid-Drone VTOL, é um VANT de configuração híbrida capaz de transitar entre o modo de voo quadricóptero e o modo de asa fixa. A Figura~\ref{fig:fases_voo} ilustra as fases típicas de voo desse tipo de aeronave, desde a decolagem vertical até o pouso, passando pela transição e pelo cruzeiro como asa fixa.
 
-O principal objetivo deste projeto é obter um modelo matemático não-linear preciso que descreva a dinâmica completa da aeronave, incluindo as fases de decolagem, pouso e a complexa transição entre os modos de voo. A imagem abaixo ilustra as fases de voo do VANT, desde a decolagem vertical (passos 1 a 4) até o pouso vertical (passos 8 a 11), passando pelo voo de cruzeiro como asa fixa (passos 5 a 7).
+Embora a aeronave opere em múltiplos modos de voo, as fases de decolagem e pouso vertical são realizadas exclusivamente no modo quadricóptero e constituem as etapas mais críticas para a operação autônoma. Nesse contexto, o presente trabalho concentra-se na identificação do modelo dinâmico do modo quadricóptero, levando em consideração as particularidades de uma plataforma VTOL híbrida -- como a distribuição de massa assimétrica decorrente da configuração H-frame com superfícies aerodinâmicas e motor traseiro de cruzeiro.
 
 \begin{figure}
       \centering
       \includegraphics[width=\dimexpr\linewidth-11pt\relax]{images/passos.png}
-      \caption{Ilustração das etapas de voo de um VTOL}
-      \label{anomalias}
+      \caption{Ilustração das etapas de voo de um VTOL híbrido.}
+      \label{fig:fases_voo}
 \end{figure}
 
-A partir de curvas de empuxo e torque dos motores, e dos momentos de inércia do VANT, um modelo matemático será desenvolvido e validado com dados de voo reais. Este modelo servirá como base para o desenvolvimento de algoritmos de controle e simulação, visando a criação de um piloto automático para as manobras de decolagem e pouso.
+O objetivo principal é obter, a partir de dados de voo reais, um modelo matemático não-linear identificado que represente com fidelidade a dinâmica do modo quadricóptero. Esse modelo servirá como base para o desenvolvimento de algoritmos de controle e de um piloto automático (PA) para as manobras autônomas de decolagem e pouso vertical. A identificação é realizada a partir de curvas de empuxo e torque dos motores obtidas em bancada, dos momentos de inércia da aeronave e de dados coletados em manobras de voo específicas.
 
 \section{Método M4M de Identificação}
 
@@ -103,44 +111,103 @@ As fases da metodologia M4M são:
 
 Após a fase de identificação, o modelo obtido é submetido a uma fase de validação, na qual dados de voo complementares, não utilizados na estimação, são usados para verificar a capacidade preditiva e a robustez do modelo.
 
-\section{Modelo Matemático do UAV VTOL}
+\section{Modelo Matemático do Modo Quadricóptero}
 
-O modelo matemático do VANT VTOL foi desenvolvido considerando a aeronave como um corpo rígido. O modelo unifica a dinâmica tanto para o modo de voo como quadrirotor quanto como asa fixa, e também a fase de transição entre eles.
+O modelo matemático foi desenvolvido considerando a aeronave como um corpo rígido operando no modo quadricóptero. Neste modo, a sustentação e o controle de atitude são realizados exclusivamente pelos quatro motores verticais, enquanto o motor traseiro de cruzeiro e as superfícies aerodinâmicas permanecem inativos. Embora a configuração VTOL híbrida introduza particularidades na distribuição de massa e na geometria da aeronave em relação a um quadricóptero convencional, a dinâmica neste modo é governada unicamente pelas forças e momentos gerados pelos rotores verticais. As Figuras~\ref{fig:drone_config} e~\ref{fig:drone_real} ilustram a configuração da aeronave e a disposição dos motores.
 
 \begin{figure}
       \centering
       \includegraphics[width=\dimexpr\linewidth-11pt\relax]{images/drone.png}
-      \caption{Representação Drone e Motores}
-      \label{unet3}
+      \caption{Configuração da aeronave e disposição dos motores.}
+      \label{fig:drone_config}
+\end{figure}
+
+\begin{figure}
+      \centering
+      \includegraphics[width=\dimexpr\linewidth-11pt\relax]{images/rdrone.jpeg}
+      \caption{Aeronave DH Hybrid-Drone VTOL.}
+      \label{fig:drone_real}
 \end{figure}
 
 O modelo é descrito por um conjunto de equações de estado não-lineares. Os vetores de estado ($x$) e de entrada ($u$) são definidos como:
-$$
-x = [\phi, \theta, \psi, p, q, r, u, v, w, \delta_a, \delta_e, \delta_r]^T
-$$
-$$
-u = [\delta_a^{sp}, \delta_e^{sp}, \delta_r^{sp}, \delta_t, \delta_{MR,1}, \delta_{MR,2}, \delta_{MR,3}, \delta_{MR,4}]^T
-$$
-Onde $\phi, \theta, \psi$ são os ângulos de Euler; $p, q, r$ são as velocidades angulares; $u, v, w$ são as velocidades lineares no sistema de eixos do corpo; $\delta_a, \delta_e, \delta_r$ são as deflexões das superfícies de controle; $\delta_a^{sp}, \delta_e^{sp}, \delta_r^{sp}$ são os setpoints das superfícies de controle; $\delta_t$ é a entrada do motor de voo de cruzeiro; e $\delta_{MR,i}$ são as entradas dos quatro motores do multirotor [3].
+\begin{equation}
+x = [\phi, \theta, \psi, p, q, r, u, v, w]^T
+\end{equation}
+\begin{equation}
+u = [\delta_{MR,1}, \delta_{MR,2}, \delta_{MR,3}, \delta_{MR,4}]^T
+\end{equation}
+Onde $\phi, \theta, \psi$ são os ângulos de Euler (rolagem, arfagem e guinada); $p, q, r$ são as velocidades angulares no referencial do corpo; $u, v, w$ são as velocidades lineares no sistema de eixos do corpo; e $\delta_{MR,i}$ são os sinais de comando PWM enviados aos quatro motores do multirotor [3].
 
-As equações de força no referencial do corpo são dadas por:
+As equações de aceleração translacional no referencial do corpo são dadas por:
 
 \begin{align}
-\dot{u} &= rv - qw + \frac{1}{m}(X + T - mg\sin\theta) \\
-\dot{v} &= pw - ru + \frac{1}{m}(Y + mg\sin\phi\cos\theta) \\
-\dot{w} &= qu - pv + \frac{1}{m}(Z - T_{MR} + mg\cos\phi\cos\theta)
+\dot{u} &= rv - qw - g\sin\theta + X_u\, u \\
+\dot{v} &= pw - ru + g\sin\phi\cos\theta + Y_v\, v \\
+\dot{w} &= qu - pv + g\cos\phi\cos\theta - \frac{T_{MR}}{m} + Z_w\, w + B_z
 \end{align}
 
-Onde $X, Y, Z$ são as forças aerodinâmicas, $T$ é o empuxo do motor de asa fixa, $T_{MR}$ é o empuxo total dos motores do multirotor e $mg$ é a força da gravidade.
+Onde $T_{MR}$ é o empuxo total dos motores do multirotor, $g$ é a aceleração da gravidade, $X_u$, $Y_v$ e $Z_w$ são os coeficientes de arrasto por unidade de massa e $B_z$ é um termo de bias translacional. Esses coeficientes são detalhados na Subseção que trata das forças aerodinâmicas de arrasto.
 
-As equações de momento são:
+\subsubsection{Modelo de Empuxo e Torque dos Motores}
+
+O empuxo total $T_{MR}$ é dado pela soma das contribuições individuais de cada motor:
 \begin{align}
-\dot{p} &= \Gamma_1 pq - \Gamma_2 qr + \Gamma_3 \tau_x + \Gamma_4 \tau_z \\
-\dot{q} &= \Gamma_5 pr - \Gamma_6 (p^2 - r^2) + \frac{1}{J_{yy}}\tau_y \\
-\dot{r} &= \Gamma_7 pq - \Gamma_1 qr + \Gamma_4 \tau_x + \Gamma_8 \tau_z
+T_{MR} = \sum_{i=1}^{4} k_{T_i} \cdot T_{\text{ref}}(\delta_{MR,i})
+\end{align}
+onde $T_{\text{ref}}(\delta_{MR,i})$ é a função de referência de empuxo obtida por caracterização em bancada de testes, que mapeia o sinal de comando PWM ($\delta_{MR,i}$) para o empuxo estático em Newtons, e $k_{T_i}$ é um fator de escala identificável para cada motor, que compensa diferenças entre o empuxo real em voo e o empuxo medido em bancada. Da mesma forma, o contra-torque de cada motor é modelado como:
+\begin{align}
+Q_{MR,i} = k_{Q_i} \cdot Q_{\text{ref}}(\delta_{MR,i})
+\end{align}
+onde $Q_{\text{ref}}$ é a curva de torque reativo obtida em bancada e $k_{Q_i}$ é o respectivo fator de escala.
+
+As funções $T_{\text{ref}}$ e $Q_{\text{ref}}$ foram obtidas experimentalmente por meio de ensaios estáticos em bancada dinamométrica, onde o empuxo e o torque reativo foram medidos para diferentes valores de PWM. Os dados experimentais foram ajustados por polinômios de terceiro grau, conforme apresentado na Figura~\ref{fig:bench_motor}.
+
+\begin{figure}[htbp]
+      \centering
+      \includegraphics[width=\linewidth]{images/bench_motor.png}
+      \caption{Curvas de empuxo e torque reativo em função do PWM, obtidas por caracterização em bancada. Os pontos representam os dados experimentais e a linha contínua é o ajuste polinomial de terceiro grau.}
+      \label{fig:bench_motor}
+\end{figure}
+
+\subsubsection{Coeficientes Aerodinâmicos de Arrasto}
+
+Os coeficientes $X_u$, $Y_v$ e $Z_w$ presentes nas equações translacionais representam o arrasto aerodinâmico por unidade de massa (com dimensão de $\text{s}^{-1}$), modelado como proporcional à velocidade linear no respectivo eixo do corpo. O termo $B_z$ é um bias translacional (com dimensão de $\text{m/s}^2$) que captura efeitos constantes não modelados, como assimetrias de empuxo. Esses coeficientes são parâmetros a serem identificados e valores negativos indicam que o arrasto se opõe ao movimento, como esperado fisicamente.
+
+\subsubsection{Tensor de Inércia}
+
+A dinâmica rotacional do corpo rígido é governada pelo tensor de inércia $\mathbf{J}$, que relaciona as velocidades angulares com os momentos angulares da aeronave. Para o referencial do corpo com origem no centro de gravidade, o tensor de inércia é dado por:
+\begin{align}
+\mathbf{J} = \begin{bmatrix}
+J_{xx} & 0 & -J_{xz} \\
+0 & J_{yy} & 0 \\
+-J_{xz} & 0 & J_{zz}
+\end{bmatrix}
+\end{align}
+onde $J_{xx}$, $J_{yy}$ e $J_{zz}$ são os momentos de inércia em torno dos eixos $x$, $y$ e $z$ do corpo, respectivamente, e $J_{xz}$ é o produto de inércia cruzado. Os produtos $J_{xy}$ e $J_{yz}$ são nulos por simetria do plano $xz$. No entanto, o produto de inércia $J_{xz}$ é não-nulo, uma vez que a aeronave possui configuração H-frame com braços dianteiros e traseiros de comprimentos distintos, o que resulta em uma distribuição de massa assimétrica em relação ao plano $xy$. Essa assimetria introduz acoplamento entre os eixos de rolagem e guinada, tornando o produto $J_{xz}$ um parâmetro relevante na modelagem e identificação do sistema.
+
+\subsubsection{Constantes de Inércia $\Gamma_i$}
+
+As equações de momento do corpo rígido utilizam constantes $\Gamma_i$ derivadas dos momentos e produtos de inércia da aeronave. Definindo $\Gamma_0 = J_{xx} J_{zz} - J_{xz}^2$, as constantes são:
+
+\begin{align}
+\Gamma_1 &= \frac{J_{xz}(J_{xx} - J_{yy} + J_{zz})}{\Gamma_0} \\
+\Gamma_2 &= \frac{J_{zz}(J_{zz} - J_{yy}) + J_{xz}^2}{\Gamma_0} \\
+\Gamma_3 &= \frac{J_{zz}}{\Gamma_0} \quad , \quad
+\Gamma_4 = \frac{J_{xz}}{\Gamma_0} \\
+\Gamma_5 &= \frac{J_{zz} - J_{xx}}{J_{yy}} \quad , \quad
+\Gamma_6 = \frac{J_{xz}}{J_{yy}} \\
+\Gamma_7 &= \frac{J_{xx}(J_{xx} - J_{yy}) + J_{xz}^2}{\Gamma_0} \\
+\Gamma_8 &= \frac{J_{xx}}{\Gamma_0}
 \end{align}
 
-Onde $\tau_x, \tau_y, \tau_z$ são os torques totais (aerodinâmicos e dos motores) em torno dos eixos do corpo. As constantes $\Gamma_i$ são funções dos momentos e produtos de inércia ($J_{xx}, J_{yy}, J_{zz}, J_{xz}$) da aeronave [6].
+As equações de momento são então dadas por:
+\begin{align}
+\dot{p} &= \Gamma_1 pq - \Gamma_2 qr + \Gamma_3 \tau_x + \Gamma_4 \tau_z - D_p\, p + B_p \\
+\dot{q} &= \Gamma_5 pr - \Gamma_6 (p^2 - r^2) + \frac{1}{J_{yy}}\tau_y - D_q\, q + B_q \\
+\dot{r} &= \Gamma_7 pq - \Gamma_1 qr + \Gamma_4 \tau_x + \Gamma_8 \tau_z - D_r\, r + B_r
+\end{align}
+
+Onde $\tau_x, \tau_y, \tau_z$ são os torques totais (aerodinâmicos e dos motores) em torno dos eixos do corpo. Os termos $D_p$, $D_q$ e $D_r$ são coeficientes de amortecimento angular, que modelam a dissipação de energia rotacional devido ao arrasto aerodinâmico das hélices e da fuselagem. Esses coeficientes são proporcionais à velocidade angular no respectivo eixo, de modo que quanto maior a velocidade de rotação, maior a força de amortecimento que se opõe ao movimento. Os termos $B_p$, $B_q$ e $B_r$ são constantes de bias que capturam assimetrias e desbalanços não modelados, como diferenças de empuxo entre os motores, desalinhamentos mecânicos ou efeitos aerodinâmicos constantes. Todos esses coeficientes são parâmetros a serem estimados no processo de identificação.
 
 As equações da cinemática dos ângulos de Euler são:
 
@@ -150,80 +217,236 @@ As equações da cinemática dos ângulos de Euler são:
 \dot{\psi} &= \frac{q\sin\phi + r\cos\phi}{\cos\theta}
 \end{align}
 
-\section{Modelo do Quadrirotor}
-No modo de voo quadrirotor, o controle da aeronave é realizado exclusivamente pelos quatro motores de sustentação [4]. A força de empuxo total $T_{MR}$ gerada pelos motores atua principalmente na direção do eixo $z$ do corpo, controlando a altitude.
-$$
-F_{MR} = [0, 0, -T_{MR}]^T \quad
-$$
-Os momentos de controle de rolagem ($\tau_x$), arfagem ($\tau_y$) e guinada ($\tau_z$) são gerados pela variação diferencial do empuxo de cada motor e pelo contra-torque aerodinâmico [5]. Os momentos de rolagem e arfagem são gerados pelo empuxo diferencial dos motores:
-$$
-\tau_{MR_T} = [\tau_{MR_{T,x}}, \tau_{MR_{T,y}}, 0]^T \quad
-$$
-O momento de guinada é gerado pelo contra-torque resultante da rotação dos hélices. Motores 1 e 2 giram em um sentido, enquanto os motores 3 e 4 giram no sentido oposto para cancelar o torque em voo pairado [5].
-$$
-Q_{MR} = Q_{MR,1} + Q_{MR,2} - Q_{MR,3} - Q_{MR,4} \quad
-$$
+\subsection{Forças e Momentos de Propulsão}
 
-A modelagem da atitude do quadrirotor é frequentemente realizada utilizando ângulos de Euler ou Quatérnions.
+A força de empuxo total $T_{MR}$ gerada pelos quatro motores atua na direção do eixo $z$ do corpo, sendo responsável pelo controle de altitude [4]:
+\begin{equation}
+F_{MR} = [0, 0, -T_{MR}]^T
+\end{equation}
+Os momentos de controle de rolagem ($\tau_x$), arfagem ($\tau_y$) e guinada ($\tau_z$) são gerados pela variação diferencial do empuxo de cada motor e pelo contra-torque aerodinâmico [5]. Os momentos de rolagem e arfagem resultam do empuxo diferencial dos motores:
+\begin{equation}
+\tau_{MR_T} = [\tau_{MR_{T,x}}, \tau_{MR_{T,y}}, 0]^T
+\end{equation}
+O momento de guinada é gerado pelo contra-torque resultante da rotação das hélices. Os motores 1 e 2 giram em um sentido, enquanto os motores 3 e 4 giram no sentido oposto, de modo a cancelar o torque resultante em voo pairado [5]:
+\begin{equation}
+Q_{MR} = Q_{MR,1} + Q_{MR,2} - Q_{MR,3} - Q_{MR,4}
+\end{equation}
 
-\section{Otimização por Mínimos Quadrados Não-Lineares}
+\section{Estimação de Parâmetros}
 
-A estimação dos parâmetros do modelo matemático foi realizada por meio de um método de otimização de mínimos quadrados não-lineares. Essa abordagem é uma técnica robusta no domínio do tempo, projetada para determinar os parâmetros de um sistema ao minimizar a soma dos quadrados das diferenças entre os dados medidos e a predição de um modelo não-linear. O objetivo central é encontrar um vetor de parâmetros $\Theta$ que minimize a função de custo, que representa o erro residual entre a saída real do sistema, $z$, e a saída simulada pelo modelo, $y(\Theta)$.
+A estimação dos parâmetros do modelo do modo quadricóptero combina dois métodos complementares: o Método de Erro de Equação (\textit{Equation Error Method} -- EEM) para obtenção de estimativas iniciais, e o Método de Erro de Saída (\textit{Output Error Method} -- OEM) para o refinamento final. Ambos operam no domínio do tempo, buscando o vetor de parâmetros $\Theta$ que minimize a função de custo baseada nos resíduos entre as saídas medidas $z$ e as simuladas $y(\Theta)$.
 
-O processo de otimização pode ser resumido nas seguintes etapas:
+O princípio geral da estimação segue as etapas:
 \begin{itemize}
-    \item Uma entrada de controle conhecida ($u$) é aplicada tanto ao veículo aéreo real quanto ao modelo matemático que se deseja identificar.
-    \item A resposta do sistema real ($z$) a essa entrada é registrada pelos sensores da aeronave, sendo sujeita a ruídos de medição inerentes ao processo.
-    \item O modelo matemático, implementado computacionalmente, utiliza a mesma entrada ($u$) para simular a resposta do sistema ($y$) com base em um conjunto inicial de parâmetros $\Theta$.
-    \item O resíduo, ou erro de resposta (z-y), é calculado em cada ponto no tempo.
-    \item Um algoritmo de otimização ajusta iterativamente os parâmetros $\Theta$ do modelo com o objetivo de minimizar a soma dos quadrados dos resíduos. Este processo continua até que os critérios de convergência sejam atendidos. [2].
+    \item Uma entrada de controle conhecida ($u$) é aplicada ao veículo real e ao modelo matemático.
+    \item A resposta do sistema real ($z$) é registrada pelos sensores, sujeita a ruídos de medição.
+    \item O modelo utiliza a mesma entrada ($u$) para simular a resposta ($y$) com base nos parâmetros $\Theta$.
+    \item Os resíduos ($z - y$) são calculados e ponderados.
+    \item O algoritmo de otimização \textit{Trust-Region Reflective}~[2], implementado na função \texttt{lsqnonlin} do MATLAB, ajusta iterativamente $\Theta$ até a convergência.
 \end{itemize}
 
-A função de custo a ser minimizada é dada por:
+A função de custo ponderada a ser minimizada é dada por:
 \begin{align}
-J(\Theta) = {} & \sum_{k=1}^{N} [z(t_{k}) - y(t_{k},\Theta)] = \sum_{k=1}^{N} f_{k}(\Theta)^2
+J(\Theta) = \sum_{k=1}^{N} \left\| \mathbf{W}^{1/2} \left[ z(t_{k}) - y(t_{k},\Theta) \right] \right\|^2
+\end{align}
+onde $z(t_k)$ é o vetor de saídas medidas no instante $t_k$, $y(t_k, \Theta)$ é a saída simulada pelo modelo com parâmetros $\Theta$, e $\mathbf{W}$ é uma matriz diagonal de pesos cujos elementos são o inverso da variância de cada canal de saída ($W_{ii} = 1/\sigma_i^2$). Essa ponderação normaliza as diferentes grandezas (velocidades angulares em rad/s vs.\ acelerações em m/s$^2$), evitando que saídas com maior magnitude dominem a função de custo. Definindo o vetor de resíduos ponderados $f(\Theta) = \mathbf{W}^{1/2}[z - y(\Theta)]$, o problema de otimização consiste em encontrar:
+\begin{align}
+\min_{\Theta} \; \frac{1}{2}\|f(\Theta)\|_{2}^2 = \frac{1}{2}\sum_{k=1}^{N} f_{k}(\Theta)^2
 \end{align}
 
-Onde $f_{k}(\Theta)$ representa o erro residual no instante de tempo $t_{k}$. O problema de otimização consiste em encontrar:
-
+A cada iteração $k$, o algoritmo calcula a matriz Jacobiana $\mathbf{J}$, contendo as derivadas parciais do vetor de resíduos em relação a cada parâmetro, e determina o passo de atualização $\delta_k$:
 \begin{align}
-min_{\Theta} \frac{1}{2}\|f(\theta)\|_{2}^2 = \frac{1}{2}sum_{k=1}^{N} f_{k}(\Theta)^2
+J_{ij} = \frac{\partial f_i(\Theta)}{\partial \Theta_j}
 \end{align}
 
-O processo de atualização dos parâmetros, conduzido por algoritmos como o de Levenberg-Marquardt, é um ciclo iterativo fundamentado na sensibilidade do erro do modelo em relação a cada parâmetro. A cada iteração $k$, o objetivo é encontrar um vetor de atualização, $\delta_k$, que, ao ser somado ao vetor de parâmetros atual, $\Theta_k$, produza um novo vetor $\Theta_{k+1 }$ que reduza o valor da função de custo.
-
-Para determinar a direção e a magnitude ideais desse passo, o algoritmo primeiro calcula a matriz Jacobiana, J. A Jacobiana é uma matriz que contém as derivadas parciais de primeira ordem de cada componente do vetor de erro residual em relação a cada parâmetro do modelo. Essencialmente, ela quantifica a sensibilidade da saída do sistema a pequenas alterações nos parâmetros:
-
-\begin{align}
-J_{ij} = \frac{\partial f(\Theta)}{\partial \Theta_j}
-\end{align}
-
-O método de Levenberg-Marquardt utiliza a Jacobiana para calcular o passo de atualização $\delta$ através da solução do seguinte sistema de equações lineares:
-
-\begin{align}
-(J^TJ + \lambda I)\delta = -J^T f(\Theta)
-\end{align}
-
-Após resolver o sistema e encontrar o vetor de passo $\delta_k$, os parâmetros são atualizados pela seguinte regra:
-
+O algoritmo \textit{Trust-Region Reflective}~[2], utilizado via \texttt{lsqnonlin}, resolve a cada iteração um subproblema restrito a uma região de confiança, permitindo a incorporação de limites (\textit{bounds}) nos parâmetros. A atualização segue:
 \begin{align}
 \Theta_{k+1} = \Theta_{k} + \delta_k
 \end{align}
 
+A qualidade do ajuste é avaliada pelo coeficiente de determinação $R^2$, definido para cada canal de saída como:
+\begin{align}
+R^2 = 1 - \frac{\sum_{k=1}^{N}(z_k - y_k)^2}{\sum_{k=1}^{N}(z_k - \bar{z})^2}
+\end{align}
+onde $\bar{z}$ é a média dos dados experimentais. Valores de $R^2$ próximos de 1 indicam excelente aderência entre modelo e dados reais.
+
+A Figura~\ref{fig:opt_loop} ilustra a relação entre as equações do processo de otimização e o fluxo computacional implementado. O ciclo inicia com um vetor de parâmetros $\Theta_k$ que alimenta o modelo matemático. O modelo é simulado numericamente (integração Runge-Kutta de 4ª ordem) utilizando as mesmas entradas de controle aplicadas ao veículo real, produzindo as saídas simuladas $y(t_k, \Theta)$. Essas saídas são comparadas com as medições reais $z(t_k)$ e ponderadas pela matriz $\mathbf{W}^{1/2}$, formando o vetor de resíduos $f(\Theta)$ conforme a Equação~(22). O algoritmo \textit{Trust-Region Reflective}, implementado na função \texttt{lsqnonlin}, recebe esse vetor e busca minimizar $\|f(\Theta)\|^2$ (Equação~23). Internamente, o algoritmo calcula a matriz Jacobiana $\mathbf{J}$ (Equação~24) por diferenças finitas --- perturbando cada parâmetro $\Theta_j$ individualmente e observando a variação no vetor de resíduos --- e utiliza essa informação de sensibilidade para determinar o passo de atualização $\delta_k$ dentro da região de confiança. Os parâmetros são então atualizados conforme a Equação~(25), e o ciclo se repete até a convergência. Após a convergência, a qualidade do ajuste é avaliada pelo coeficiente $R^2$ (Equação~26) no segmento de validação, que não participou da otimização.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=0.9cm,
+    block/.style={rectangle, draw, rounded corners=2pt, minimum width=2.7cm, minimum height=0.7cm, align=center, font=\scriptsize},
+    decis/.style={rectangle, draw, rounded corners=2pt, fill=orange!12, minimum width=2.4cm, minimum height=0.7cm, align=center, font=\scriptsize},
+    arrow/.style={-{Stealth[length=2mm]}, semithick},
+    dasharrow/.style={-{Stealth[length=2mm]}, semithick, dashed},
+    lbl/.style={font=\tiny, fill=white, inner sep=1pt}
+]
+
+% --- Topo: Parâmetros (esquerda) e Medições (direita) ---
+\node[block, fill=green!15] (theta)
+    {$\Theta_k$ -- Par\^ametros atuais};
+
+\node[block, fill=gray!15, right=1.5cm of theta] (data)
+    {Medi\c{c}\~oes $z(t_k)$\\(sensores)};
+
+% --- Coluna central (entre theta e data) ---
+\node[block, fill=blue!10, below=0.9cm of $(theta.south)!0.5!(data.south)$] (model)
+    {Modelo Matem\'atico\\(RK4 por janela)};
+
+\node[block, fill=blue!10, below=of model] (resid)
+    {\textbf{Eq.~(22)} -- Res\'iduos ponderados\\$f(\Theta) = \mathbf{W}^{1/2}[z - y]$};
+
+\node[block, fill=yellow!18, below=of resid] (lsq)
+    {\textbf{Eq.~(23)} -- $\min \tfrac{1}{2}\|f(\Theta)\|^2$\\\texttt{lsqnonlin} (\textit{Trust-Region})};
+
+\node[decis, below=of lsq] (conv) {Convergiu?};
+
+\node[block, fill=red!10, below=of conv] (r2)
+    {\textbf{Eq.~(26)} -- $R^2 = 1 - SS_{\text{res}}/SS_{\text{tot}}$\\(valida\c{c}\~ao)};
+
+% --- Esquerda: interno lsqnonlin ---
+\node[block, fill=yellow!18, left=0.5cm of lsq] (jac)
+    {\textbf{Eq.~(24)} -- Jacobiana\\$J_{ij} = \partial f_i / \partial \Theta_j$};
+
+\node[block, fill=green!15, left=0.5cm of resid] (update)
+    {\textbf{Eq.~(25)} -- Atualiza\c{c}\~ao\\$\Theta_{k+1} = \Theta_k + \delta_k$};
+
+% === SETAS ===
+\draw[arrow] (theta) |- (model);
+\draw[arrow] (model) -- node[lbl, right] {$y(t_k,\Theta)$} (resid);
+\draw[arrow] (resid) -- (lsq);
+\draw[arrow] (lsq) -- (conv);
+\draw[arrow] (conv) -- node[lbl, right] {Sim} (r2);
+
+% Dados → resíduos (desce do topo)
+\draw[arrow] (data) |- (resid);
+
+% Interno lsqnonlin
+\draw[dasharrow] (lsq) -- (jac);
+\draw[dasharrow] (jac) -- (update);
+
+% Não → atualização (contorna pelo lado esquerdo)
+\coordinate (aux) at ([xshift=-0.7cm]jac.west);
+\draw[arrow] (conv.west) -| node[lbl, near start, above] {N\~ao} (aux) |- (update.west);
+
+% Loop de volta
+\draw[arrow] (update) -- (theta);
+
+% Caixa tracejada
+\begin{scope}[on background layer]
+\node[draw=gray, dashed, rounded corners=4pt, fill=gray!5,
+      inner xsep=8pt, inner ysep=8pt,
+      fit=(jac)(update),
+      label={[font=\tiny, text=gray]above: }] {};
+\end{scope}
+
+\end{tikzpicture}
+\caption{Fluxo iterativo da estima\c{c}\~ao de par\^ametros. O vetor de res\'iduos $f(\Theta)$ (Eq.~22) \'e fornecido ao \texttt{lsqnonlin}, que calcula internamente a Jacobiana (Eq.~24) e o passo $\delta_k$ (Eq.~25). Ap\'os converg\^encia, o ajuste \'e avaliado por $R^2$ (Eq.~26).}
+\label{fig:opt_loop}
+\end{figure}
+
+\subsection{Método de Erro de Saída com Multijanelas}
+
+Neste trabalho, a estimação dos parâmetros foi realizada por meio do Método de Erro de Saída (\textit{Output Error Method} -- OEM) com uma estratégia de multijanelas progressivas. Diferentemente do OEM convencional, que integra o modelo ao longo de todo o registro de voo com uma única condição inicial, a abordagem por multijanelas divide cada segmento de dados em janelas temporais menores. No início de cada janela, os estados do modelo são reinicializados com os valores medidos, de modo que os erros de integração não se propagam entre janelas adjacentes. Isso aumenta significativamente a robustez da identificação, pois impede que divergências locais contaminem o restante da simulação.
+
+O processo de identificação é dividido em duas fases sequenciais, conforme ilustrado na Figura~\ref{fig:oem_diagram}:
+
+\begin{itemize}
+    \item \textbf{Fase A -- EEM (Equation Error Method):} Os dados de todos os segmentos de treino são concatenados e utilizados em uma formulação algébrica (sem integração numérica). Os parâmetros rotacionais são estimados minimizando o erro entre as derivadas angulares medidas e as calculadas pelo modelo. Esta fase fornece uma estimativa inicial robusta $\Theta_{\text{EEM}}$ para a Fase B.
+    \item \textbf{Fase B -- OEM (Output Error Method) Progressivo:} A partir de $\Theta_{\text{EEM}}$, o modelo é integrado numericamente (Runge-Kutta de 4ª ordem) dentro de cada janela. A duração das janelas é progressivamente aumentada ($T_w = 1\text{s} \to 2\text{s} \to 3\text{s}$), de modo que nas primeiras etapas o otimizador ajusta os parâmetros com menor risco de divergência, e nas etapas seguintes captura a dinâmica de mais longo prazo. A cada estágio, o desempenho é avaliado no segmento de validação, e o conjunto de parâmetros com melhor coeficiente de determinação $R^2$ é selecionado como resultado final $\Theta^*$.
+\end{itemize}
+
+A função de custo do OEM multijanelas agrega os resíduos ponderados de todas as janelas de todos os segmentos de treino:
+\begin{align}
+J(\Theta) = \sum_{s=1}^{N_s} \sum_{w=1}^{N_w^{(s)}} \sum_{k \in \mathcal{W}_w^{(s)}} \left\| \mathbf{W}^{1/2} \left[ z(t_k) - y(t_k, \Theta) \right] \right\|^2
+\end{align}
+onde $N_s$ é o número de segmentos de treino, $N_w^{(s)}$ é o número de janelas no segmento $s$, $\mathcal{W}_w^{(s)}$ são os índices temporais da janela $w$, e $\mathbf{W}^{1/2}$ é a raiz quadrada da matriz de pesos conforme definido anteriormente. As saídas $z$ e $y$ incluem tanto as velocidades angulares $(p, q, r)$ quanto as forças específicas medidas pela IMU $(f_x, f_y, f_z)$.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+    node distance=0.6cm and 0.4cm,
+    block/.style={rectangle, draw, fill=blue!8, text width=2.2cm, minimum height=0.7cm, align=center, font=\scriptsize},
+    bigblock/.style={rectangle, draw, fill=green!8, text width=2.8cm, minimum height=0.7cm, align=center, font=\scriptsize},
+    smallblock/.style={rectangle, draw, fill=orange!10, text width=1.4cm, minimum height=0.55cm, align=center, font=\tiny},
+    arrow/.style={-{Stealth[length=2mm]}, thick},
+    every node/.style={font=\scriptsize}
+]
+
+% Top: Flight Data
+\node[block, fill=gray!15, text width=3cm] (data) {Dados de Voo\\(PWM, $p,q,r$, $\phi,\theta,\psi$, IMU)};
+
+% Segmentation
+\node[block, below=0.5cm of data] (seg) {Segmenta\c{c}\~ao Temporal};
+
+% Segments
+\node[smallblock, below left=0.5cm and 0.6cm of seg] (s1) {Seg. 1};
+\node[smallblock, below=0.5cm of seg] (s2) {Seg. 2};
+\node[smallblock, below right=0.5cm and 0.6cm of seg] (sn) {Seg. $N_s$};
+\node[smallblock, right=0.3cm of sn, fill=red!10] (val) {Valida\c{c}\~ao};
+
+% Phase A
+\node[bigblock, below=1.2cm of s2, fill=yellow!15, text width=4cm] (eembox) {\textbf{Fase A: EEM}\\Concatena segmentos\\Estima\c{c}\~ao alg\'ebrica $\to \Theta_{\text{EEM}}$};
+
+% Phase B
+\node[bigblock, below=0.5cm of eembox, fill=green!12, text width=4cm] (oembox) {\textbf{Fase B: OEM Progressivo}};
+
+% Windows inside OEM
+\node[smallblock, below left=0.5cm and 0.4cm of oembox, fill=green!20] (w1) {$T_w=1$s};
+\node[smallblock, below=0.5cm of oembox, fill=green!20] (w2) {$T_w=2$s};
+\node[smallblock, below right=0.5cm and 0.4cm of oembox, fill=green!20] (w3) {$T_w=3$s};
+
+% Best selection
+\node[block, below=1.2cm of w2, fill=red!10, text width=3.2cm] (best) {Seleciona melhor $R^2$\\no segmento de valida\c{c}\~ao\\$\Theta^*$};
+
+% Arrows
+\draw[arrow] (data) -- (seg);
+\draw[arrow] (seg) -- (s1);
+\draw[arrow] (seg) -- (s2);
+\draw[arrow] (seg) -- (sn);
+\draw[arrow] (seg) -- (val);
+
+\draw[arrow] (s1) -- (eembox);
+\draw[arrow] (s2) -- (eembox);
+\draw[arrow] (sn) -- (eembox);
+
+\draw[arrow] (eembox) -- node[right, font=\tiny] {$\Theta_{\text{EEM}}$} (oembox);
+
+\draw[arrow] (oembox) -- (w1);
+\draw[arrow] (oembox) -- (w2);
+\draw[arrow] (oembox) -- (w3);
+
+\draw[arrow] (w1) -- (best);
+\draw[arrow] (w2) -- (best);
+\draw[arrow] (w3) -- (best);
+
+% Validation arrow
+\draw[arrow, dashed] (val.south) |- (best.east);
+
+\end{tikzpicture}%
+}
+\caption{Diagrama do processo de identifica\c{c}\~ao por OEM com multijanelas progressivas. Os segmentos de treino alimentam a Fase~A (EEM alg\'ebrico) e a Fase~B (OEM com janelas de dura\c{c}\~ao crescente). O melhor conjunto de par\^ametros \'e selecionado com base no $R^2$ do segmento de valida\c{c}\~ao.}
+\label{fig:oem_diagram}
+\end{figure}
+
+A reinicialização dos estados no início de cada janela é um aspecto fundamental da abordagem. Dentro de cada janela $w$, o integrador RK4 parte das condições iniciais medidas $z(t_{w,0})$ e propaga os estados até o final da janela. Essa técnica, conhecida como \textit{multiple shooting}, garante que o erro de cada janela dependa apenas da qualidade local dos parâmetros, e não do acúmulo de erros de janelas anteriores.
+
 \section{Metodologia}
 
-A abordagem metodológica deste trabalho é fundamentada na estrutura de identificação de sistemas M4M (Maneuver, Measurements, Methods, Models). Essa metodologia provê um caminho sistemático para a obtenção de modelos matemáticos a partir de dados experimentais. As etapas práticas envolveram a coleta de dados de voo através de manobras específicas, a determinação de constantes iniciais para o modelo e a implementação do modelo matemático em um ambiente de simulação para o processo de identificação
+A abordagem metodológica deste trabalho é fundamentada na estrutura de identificação de sistemas M4M. As etapas práticas envolveram a coleta de dados de voo no modo quadricóptero por meio de manobras específicas, a determinação de constantes iniciais para o modelo e a implementação do modelo matemático em ambiente de simulação para o processo de identificação.
 
 \subsection{Manobras e Dados para Identificação}
 
-A qualidade da identificação de sistema depende diretamente da qualidade dos dados coletados. Para garantir que os dados contivessem informação suficiente sobre a dinâmica da aeronave, foram executadas manobras de voo especificamente projetadas para excitar os modos de movimento do VANT em torno de seus eixos principais: rolagem, arfagem e guinada (Roll, Pitch, Yaw) [7] [8].
+A qualidade da identificação depende diretamente da riqueza dos dados coletados. Para garantir excitação suficiente da dinâmica do modo quadricóptero, foram executadas manobras de voo projetadas para excitar os modos de movimento em torno dos eixos principais: rolagem, arfagem e guinada [7] [8]. Todas as manobras foram realizadas com a aeronave operando exclusivamente no modo quadricóptero, com o motor de cruzeiro desligado.
 
-Os dados para o processo de identificação foram extraídos diretamente dos logs de voo da aeronave [9]. Esses dados foram divididos em dois conjuntos principais:
+Os dados foram extraídos diretamente dos logs de voo da aeronave [9] e divididos em dois conjuntos:
 
 \begin{sloppypar}
 \begin{itemize}
-    \item \textbf{Entradas do Sistema (u):} Correspondem aos sinais de controle enviados aos atuadores da aeronave. Para o modo de voo multirotor, as entradas são os sinais de Modulação por Largura de Pulso (PWM) que comandam a velocidade de rotação de cada um dos quatro motores. Esses sinais foram registrados ao longo do tempo durante as manobras.
-    \item \textbf{Saídas do Sistema (y):} Correspondem à resposta da aeronave às entradas de controle, medidas pelos sensores embarcados. As saídas utilizadas para a identificação da atitude foram as velocidades angulares nos eixos do corpo: velocidade de rolagem (p), arfagem (q) e guinada (r). Estas foram medidas em radianos por segundo.
+    \item \textbf{Entradas do Sistema ($u$):} Sinais de Modulação por Largura de Pulso (PWM) enviados aos quatro motores verticais, registrados ao longo do tempo durante as manobras.
+    \item \textbf{Saídas do Sistema ($y$):} Velocidades angulares nos eixos do corpo -- rolagem ($p$), arfagem ($q$) e guinada ($r$) -- e forças específicas medidas pela IMU ($f_x$, $f_y$, $f_z$), em radianos por segundo e m/s$^2$, respectivamente.
 \end{itemize}
 \end{sloppypar}
 
@@ -254,80 +477,175 @@ $\alpha_{trim}$ & 0 & rad & Medição física \\
 \caption{Parâmetros físicos e de voo do VANT.}
 \end{table}
 
-Os coeficientes aerodinâmicos foram obtidos de simulações e dados de voo.
+Os valores iniciais dos coeficientes aerodinâmicos foram obtidos a partir de dados de voo anteriores e estimativas preliminares, sendo posteriormente refinados pelo processo de identificação.
 
 \subsection{Simulação Dinâmica do Modelo}
 
-O conjunto completo de equações diferenciais não-lineares que descreve a dinâmica de corpo rígido do VANT foi implementado em um modelo de simulação. O ambiente MATLAB/Simulink foi escolhido para esta tarefa, dada sua ampla utilização e robustez na simulação de sistemas dinâmicos complexos.
+O conjunto de equações diferenciais não-lineares que descreve a dinâmica do modo quadricóptero foi implementado em MATLAB. O modelo foi estruturado em blocos que calculam as forças e momentos de propulsão a partir das curvas de bancada, aplicam o arrasto aerodinâmico, integram as equações de movimento rotacional e translacional (via Runge-Kutta de 4ª ordem) e propagam a cinemática de Euler, conforme o diagrama da Figura~\ref{fig:model_diagram}.
 
-O modelo em Simulink, nomeado "Hybrid Drone Model", representa fielmente a estrutura matemática do sistema. Ele foi estruturado em blocos que calculam as forças e momentos (aerodinâmicos e de propulsão), integram as equações de movimento para obter as velocidades, e integram as equações cinemáticas para obter a atitude.
+A simulação constitui o elemento central do método de estimação: ela gera a resposta prevista do modelo ($y$) para uma dada entrada de controle. Essa resposta é comparada com a resposta real da aeronave ($z$) para formar o vetor de resíduos que o algoritmo de otimização minimiza.
 
-Esta simulação é o coração do método de estimação: ela gera a resposta prevista do modelo (y) para uma dada entrada. Essa resposta prevista é então comparada com a resposta real da aeronave (z) para calcular o erro que o algoritmo de otimização irá minimizar.
+\begin{figure}[htbp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+    sysblock/.style={rectangle, draw, thick, fill=#1, minimum height=1.0cm, text width=2.2cm, align=center, font=\footnotesize, rounded corners=1pt},
+    io/.style={font=\footnotesize},
+    arr/.style={-{Stealth[length=2.5mm]}, thick},
+    lbl/.style={font=\scriptsize, fill=white, inner sep=2pt},
+    dot/.style={circle, fill=black, inner sep=0pt, minimum size=4pt},
+]
 
-\begin{figure}
-      \centering
-      \includegraphics[width=8.5cm]{images/simu.png}
-      \caption{Simulação via Simulink do Modelo}
-      \label{decoder}
+% ========== ROW 1 (y=0): PWM → Motors → RotDyn ==========
+\node[io] at (0,0) (pwm) {PWM$_{MR,1\text{-}4}$};
+\node[sysblock=orange!12, text width=1.8cm, minimum height=0.8cm] at (2.5,0) (torque) {Modelo de\\Torque};
+\node[sysblock=orange!12, text width=1.8cm, minimum height=0.8cm] at (2.5,-1.3) (thrust) {Modelo de\\Empuxo};
+\node[sysblock=blue!12, minimum height=1.4cm] at (6.2,0) (rotdyn) {Din\^amica\\Rotacional\\$\dot{p},\dot{q},\dot{r}$};
+
+\draw[arr] (pwm) -- (torque);
+\draw[arr] (pwm) |- (thrust);
+\draw[arr] (torque) -- node[lbl, above] {$Q_{MR,i}$} (rotdyn);
+\draw[arr] (thrust.east) -- ++(0.5,0) |- node[lbl, pos=0.2] {$T_{MR,i}$} ([yshift=-0.25cm]rotdyn.west);
+
+% Output p,q,r
+\node[io] at (8.5,0) (pqr_out) {$p, q, r$};
+\draw[arr] (rotdyn) -- (pqr_out);
+
+% ========== ROW 2 (y=-4): Euler ==========
+\node[sysblock=green!12] at (6.2,-4) (euler) {Cinem\'atica\\de Euler\\$\dot{\phi},\dot{\theta},\dot{\psi}$};
+\node[io] at (8.5,-4) (att_out) {$\phi, \theta, \psi$};
+\draw[arr] (euler) -- (att_out);
+
+% ========== ROW 3 (y=-8): TransDyn ==========
+\node[sysblock=red!8, minimum height=1.4cm] at (6.2,-8) (transdyn) {Din\^amica\\Translacional\\$\dot{u},\dot{v},\dot{w}$};
+\node[io] at (8.5,-7.7) (uvw_out) {$u, v, w$};
+\node[io] at (8.5,-8.3) (acc_out) {$\dot{u}, \dot{v}, \dot{w}$};
+\draw[arr] ([yshift=0.3cm]transdyn.east) -- (uvw_out);
+\draw[arr] ([yshift=-0.3cm]transdyn.east) -- (acc_out);
+
+% m, g input (enters bottom of west side)
+\node[io] at (3.5,-8.35) (const) {$m, g$};
+\draw[arr] (const) -- ([yshift=-0.35cm]transdyn.west);
+
+% ========== CONNECTIONS ==========
+
+% --- A: RotDyn → Euler (solid, center vertical) ---
+\node[dot] at (6.2,-1.5) (junc) {};
+\draw[thick] (rotdyn.south) -- (junc);
+\draw[arr] (junc) -- node[lbl, left] {$p,q,r$} (euler.north);
+
+% --- B: p,q,r → TransDyn: LEFT channel (x=0.5), enters west top ---
+\draw[arr, dashed] (junc.west) -- (4.5,-1.5) -- (4.5,-7.65) -- ([yshift=0.35cm]transdyn.west);
+
+% --- C: Euler → TransDyn (solid, center) ---
+\draw[arr] (euler.south) -- node[lbl, left] {$\phi,\theta,\psi$} (transdyn.north);
+
+% --- D: T_MR → TransDyn: DOWN channel (x=2.2), enters west middle ---
+\draw[arr, dashed] (thrust.south) -- (2.5,-8.0) -- node[lbl, above] {$T_{MR,i}$} ([yshift=0.0cm]transdyn.west);
+
+\end{tikzpicture}%
+}
+\caption{Diagrama de blocos do modelo din\^amico do VANT. As entradas PWM alimentam os modelos de empuxo e torque. Linhas tracejadas indicam sinais que alimentam a din\^amica translacional.}
+\label{fig:model_diagram}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[htbp]
       \centering
-      \includegraphics[width=7cm]{images/Imagem1.png}
-      \caption{Validação da Identificação}
-      \label{loss}
+      \includegraphics[width=\linewidth]{images/pqr_val_P01.png}
+      \caption{Velocidades angulares -- resultado final da identifica\c{c}\~ao}
+      \label{fig:pqr_val}
 \end{figure}
 
+\begin{figure}[htbp]
+      \centering
+      \includegraphics[width=\linewidth]{images/acc_val_P01.png}
+      \caption{Acelera\c{c}\~oes (for\c{c}a espec\'ifica) -- resultado final da identifica\c{c}\~ao}
+      \label{fig:acc_val}
+\end{figure}
 
 \section{RESULTADO E DISCUSSÕES}
 
-A aplicação do método dos mínimos quadrados a um sistema não linear com dados de voo permitiu a estimação dos parâmetros do modelo matemático.
+A aplicação do método dos mínimos quadrados não-lineares aos dados de voo no modo quadricóptero permitiu a estimação dos parâmetros do modelo dinâmico.
 
 \subsection{Resultado da Estimação dos Parâmetros}
 
-O processo de otimização resultou em um conjunto de parâmetros estimados para as constantes de inércia e para os coeficientes de empuxo e torque dos motores. Os parâmetros estimados são apresentados abaixo.
+O processo de otimização convergiu para um conjunto de parâmetros que inclui os momentos de inércia, fatores de escala de empuxo e torque dos motores, coeficientes de amortecimento rotacional e translacional, e termos de bias. Os valores iniciais ($P_0$) e os parâmetros estimados são apresentados nas Tabelas~\ref{tab:param_inercia},~\ref{tab:param_motor},~\ref{tab:param_rot} e~\ref{tab:param_trans}. É importante notar que os momentos de inércia estimados refletem as particularidades da configuração VTOL híbrida, em que a presença das superfícies aerodinâmicas e do motor traseiro influencia a distribuição de massa mesmo quando inativos no modo quadricóptero.
 
 \begin{table}[htbp]
 \centering
-\begin{tabular}{l|c}
+\begin{tabular}{l|c|c|c}
 \hline
-\textbf{Parâmetro} & \textbf{Valor Estimado} \\
+\textbf{Par\^ametro} & \textbf{$P_0$} & \textbf{Estimado} & \textbf{Unidade} \\
 \hline
-G1 & 0.0043426 \\
-G2 & -0.65222 \\
-G3 & 23.1355 \\
-G4 & 0.28798 \\
-G5 & 0.53723 \\
-G6 & 0.010112 \\
-G7 & -0.88082 \\
-G8 & 7.9277 \\
-InvJy & 6.4763 \\
-k\_T1 & 0.60007 \\
-k\_T2 & 0.44999 \\
-k\_T3 & 1 \\
-k\_T4 & 0.80002 \\
-k\_Q1 & 0.60001 \\
-k\_Q2 & 0.45 \\
-k\_Q3 & 1 \\
-k\_Q4 & 0.79994 \\
+$J_{xx}$ & 0.0632 & 0.0589 & kg$\cdot$m$^2$ \\
+$J_{yy}$ & 0.2506 & 0.1250 & kg$\cdot$m$^2$ \\
+$J_{zz}$ & 0.1162 & 0.1455 & kg$\cdot$m$^2$ \\
+$J_{xz}$ & 0.0016 & 0.0001 & kg$\cdot$m$^2$ \\
 \hline
 \end{tabular}
-\caption{Parâmetros estimados.}
+\caption{Momentos e produtos de in\'ercia estimados.}
+\label{tab:param_inercia}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l|c|c||l|c|c}
+\hline
+\textbf{Par\^am.} & \textbf{$P_0$} & \textbf{Est.} & \textbf{Par\^am.} & \textbf{$P_0$} & \textbf{Est.} \\
+\hline
+$k_{T_1}$ & 0.55 & 0.4733 & $k_{Q_1}$ & 0.55 & 0.3491 \\
+$k_{T_2}$ & 0.45 & 1.0379 & $k_{Q_2}$ & 0.45 & 0.4557 \\
+$k_{T_3}$ & 1.00 & 0.3279 & $k_{Q_3}$ & 1.00 & 0.7995 \\
+$k_{T_4}$ & 0.75 & 0.5339 & $k_{Q_4}$ & 0.75 & 0.1000 \\
+\hline
+\end{tabular}
+\caption{Fatores de escala de empuxo e torque dos motores.}
+\label{tab:param_motor}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l|c|c||l|c|c}
+\hline
+\textbf{Par\^am.} & \textbf{$P_0$} & \textbf{Est.} & \textbf{Par\^am.} & \textbf{$P_0$} & \textbf{Est.} \\
+\hline
+$D_p$ & 10.0 & 2.5445 & $B_p$ & 0.70 & $-$10.0000 \\
+$D_q$ & 5.0 & 1.9676 & $B_q$ & 1.40 & 10.0000 \\
+$D_r$ & 0.5 & 0.8627 & $B_r$ & 0.30 & $-$0.2452 \\
+\hline
+\end{tabular}
+\caption{Coeficientes de amortecimento e bias rotacionais.}
+\label{tab:param_rot}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l|c|c|c}
+\hline
+\textbf{Par\^ametro} & \textbf{$P_0$} & \textbf{Estimado} & \textbf{Unidade} \\
+\hline
+$X_u$ & $-$4.0000 & $-$0.5095 & s$^{-1}$ \\
+$Y_v$ & $-$4.0000 & $-$0.8426 & s$^{-1}$ \\
+$Z_w$ & $-$0.1000 & $-$2.0000 & s$^{-1}$ \\
+$B_z$ & $-$0.5000 & $-$0.3574 & m/s$^2$ \\
+\hline
+\end{tabular}
+\caption{Coeficientes aerodin\^amicos translacionais.}
+\label{tab:param_trans}
 \end{table}
 
 \subsection{Validação}
-A validação do modelo identificado foi realizada comparando a resposta simulada com um conjunto de dados de voo real que não foi utilizado no processo de estimação. Os gráficos abaixo mostram a comparação entre os dados reais (em azul) e os dados simulados pelo modelo (em vermelho) para os ângulos de atitude (rolagem, arfagem e guinada).
+A validação do modelo identificado foi realizada comparando a resposta simulada com um conjunto de dados de voo no modo quadricóptero não utilizado no processo de estimação. As Figuras~\ref{fig:pqr_val} e~\ref{fig:acc_val} apresentam a comparação entre os dados reais (azul) e simulados (vermelho) para as velocidades angulares e as forças específicas, respectivamente.
 
-
-Os resultados da validação demonstram uma excelente aderência entre a resposta do modelo identificado e os dados reais de voo, indicando que o modelo matemático captura com precisão a dinâmica da aeronave. A boa correspondência entre as curvas valida a eficácia da metodologia de identificação empregada.
+Os resultados demonstram boa aderência entre o modelo identificado e os dados reais, indicando que o modelo captura adequadamente a dinâmica do modo quadricóptero, incluindo os efeitos de acoplamento e as assimetrias decorrentes da configuração VTOL híbrida. Essa validação confirma que o modelo é adequado para servir de base ao projeto de controladores para as fases de decolagem e pouso vertical.
 
 \section{CONCLUSÃO}
 
-Este trabalho apresentou o processo de modelagem e identificação de sistema de um VANT VTOL híbrido. Utilizando a metodologia M4M e o método de estimação dos mínimos quadrados em um sistema não-linear, foi possível desenvolver um modelo matemático não-linear que representa com certa fidelidade o comportamento dinâmico da aeronave.
+Este trabalho apresentou a identificação do modelo dinâmico do modo quadricóptero de um VANT VTOL de configuração híbrida, levando em consideração as particularidades geométricas e inerciais decorrentes da presença de superfícies aerodinâmicas e motor de cruzeiro na aeronave. Utilizando a metodologia M4M e o método de erro de saída com multijanelas progressivas, foi possível estimar os parâmetros de um modelo não-linear a partir de dados de voo reais.
 
-As constantes iniciais foram obtidas a partir de medições físicas e dados prévios, e os parâmetros aerodinâmicos e de inércia foram refinados através do processo de identificação com dados de voo reais. A validação do modelo com um conjunto de dados distinto demonstrou a sua precisão e robustez.
+As constantes iniciais foram obtidas a partir de medições físicas e ensaios em bancada, e os parâmetros aerodinâmicos e de inércia foram refinados pelo processo de otimização por mínimos quadrados não-lineares. A validação com dados de voo independentes confirmou a capacidade preditiva do modelo.
 
-O modelo matemático validado constitui uma ferramenta essencial para os próximos passos do projeto, que incluem o projeto de sistemas de controle avançados e o desenvolvimento de um piloto automático capaz de realizar de forma autônoma as manobras de decolagem, transição e pouso, cumprindo assim os objetivos principais do projeto.
+O modelo identificado constitui a base para o desenvolvimento de algoritmos de controle e de um piloto automático (PA) para as fases de decolagem e pouso vertical autônomo. Trabalhos futuros incluem o projeto dos controladores de atitude e altitude, bem como a extensão da identificação para os modos de transição e asa fixa.
 
 \addtolength{\textheight}{-12cm}   % This command serves to balance the column lengths
                                   % on the last page of the document manually. It shortens

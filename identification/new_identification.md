@@ -84,24 +84,31 @@ accY_m = p*w - r*u + Yv*v
 accZ_m = q*u - p*v - T/m + Zw*w + Bz
 ```
 
-## Validação (simulate_full)
+## Validação (simulate_full → simulate_one_window)
 
-Função interna que simula o modelo completo de **9 estados acoplados** para treino e validação:
+Integração unificada de **9 estados** via `vtol_dynamics`, idêntica ao Simulink:
 
-1. **Integração única com `ode45`**: Vetor de estados `y = [p; q; r; phi; theta; psi; u; v; w]`.
-   - **Rotacional** (p, q, r): dinâmica angular completa com momentos dos motores.
-   - **Cinemática** (phi, theta, psi): propagação de atitude via equações de Euler.
-   - **Translacional** (u, v, w): dinâmica de velocidades com gravidade, empuxo e arrasto.
-   - Modelo **totalmente acoplado**: a dinâmica translacional recebe p, q, r e atitudes diretamente dos estados simulados pelo modelo rotacional, representando fielmente o comportamento do modelo.
-2. **Condição inicial**: `y0 = [p(1); q(1); r(1); phi(1); theta(1); psi(1); 0; 0; 0]`
-   - Velocidades angulares e atitude inicializadas com dados medidos.
-   - Velocidades translacionais inicializadas em zero (hover).
-3. **Força específica**: Calculada subtraindo a gravidade (usando atitude **simulada**) da aceleração inercial:
-   ```
-   accX_s = u_dot - gx    onde gx = -g*sin(theta_sim)
-   accY_s = v_dot - gy    onde gy =  g*cos(theta_sim)*sin(phi_sim)
-   accZ_s = w_dot - gz    onde gz =  g*cos(theta_sim)*cos(phi_sim)
-   ```
+```matlab
+y = [p; q; r; phi; theta; psi; u; v; w]
+[t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P, time, pwm, func_T, func_Q, constants), time, y0, opts);
+```
+
+Todos os subsistemas (rotacional, cinemática de Euler, translacional) são integrados **simultaneamente pelo mesmo solver**, sem interpolação entre etapas e sem reamostragem. Isso garante que a cinemática de Euler receba p,q,r do mesmo instante temporal exato, eliminando erro de interpolação.
+
+### Condição inicial
+```matlab
+y0 = [p(1); q(1); r(1); phi(1); theta(1); psi(1); 0; 0; 0]
+```
+- Velocidades angulares e atitude: dados medidos
+- Velocidades translacionais: zero (hover)
+
+### Força específica
+Após a integração, as derivadas são recalculadas em cada ponto da grade 10Hz para obter a força específica (o que o IMU mede):
+```
+accX_s = u_dot - gx    onde gx = -g*sin(theta_sim)
+accY_s = v_dot - gy    onde gy =  g*cos(theta_sim)*sin(phi_sim)
+accZ_s = w_dot - gz    onde gz =  g*cos(theta_sim)*cos(phi_sim)
+```
 
 ## Funções Internas (Local Functions)
 
@@ -109,9 +116,10 @@ Função interna que simula o modelo completo de **9 estados acoplados** para tr
 |--------|-----------|
 | `oem_multi_seg_cost` | Wrapper: acumula resíduos de múltiplos segmentos |
 | `oem_ms_cost_func` | Core: calcula resíduos rotacionais (RK4) + translacionais (Euler) |
-| `simulate_full` | Simulação completa 9-estados acoplados com ode45 para validação |
+| `simulate_full` | Orquestra simulação de treino e validação via `simulate_one_window` |
+| `simulate_one_window` | Integração unificada 9-estados via `vtol_dynamics` com `ode45` |
 | `print_R2` | Imprime R² de treino e validação |
-| `plot_all_results` | Gera gráficos p/q/r e AccX/Y/Z (treino + validação) |
+| `plot_all_results` | Gera gráficos p/q/r, AccX/Y/Z e atitude (treino + validação) |
 | `plot_torques` | Diagnóstico: momentos Mx, My, Mz vs entradas PWM |
 | `plot_forces` | Diagnóstico: forças translacionais + AccX/Y/Z simulado vs medido |
 
@@ -120,9 +128,9 @@ Função interna que simula o modelo completo de **9 estados acoplados** para tr
 ### Gráficos (salvos em `images/`)
 - `pqr_val_*.png` — Velocidades angulares: medido vs simulado
 - `acc_val_*.png` — Acelerações (força específica): medido vs simulado
+- `att_val_*.png` — Atitude (phi, theta, psi): EKF vs simulado
 - `torques_validacao.png` — Torques Mx, My, Mz e entradas por motor
 - `forcas_validacao.png` — Forças translacionais com modelo simulado
-- `pwm_analise.png` — Análise de PWMs, empuxo por motor, e T_ref cru
 
 ### Análise de Assimetria PWM
 Calcula coeficientes de variação e assimetrias (roll, pitch, yaw) para distinguir entre:

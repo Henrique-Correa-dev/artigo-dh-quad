@@ -132,12 +132,9 @@ y0 = [p(1); q(1); r(1); phi(1); theta(1); psi(1); 0; 0; 0];
 [t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P, time, pwm, func_T, func_Q, constants), tspan, y0);
 ```
 
-## Sub-funções Internas
+## Estrutura da Função
 
-| Função | Descrição |
-|--------|-----------|
-| `euler_kinematics()` | Cinemática de Euler: `[p,q,r]` → `[phi_dot, theta_dot, psi_dot]` |
-| `translational_eqs()` | Equações dinâmicas translacionais (gravidade via R_nb completa) |
+Função única sem sub-funções. A cinemática de Euler e a dinâmica translacional estão integradas diretamente no corpo da função principal, reduzindo overhead de chamada e complexidade.
 
 ## Entradas de Motor
 

@@ -4,6 +4,10 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     % Modo 3 estados: y = [p; q; r]                              -> rotacional
     % Modo 9 estados: y = [p; q; r; phi; theta; psi; u; v; w]    -> completa (acoplado)
     %
+    % Modo dispatch: vtol_dynamics('get_handles') retorna struct com handles
+    %   .trans_dot      → derivadas translacionais [ud, vd, wd]
+    %   .specific_force → força específica IMU [fx, fy, fz]
+    %
     % P: vetor de 20 ou 24 parâmetros identificáveis
     %   P(1:4)   = [Jx, Jy, Jz, Jxz] (momentos de inércia)
     %   P(5:8)   = k_T1..k_T4
@@ -13,6 +17,13 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     %   P(19:20) = [dx_cg, dy_cg] (offset CG vs CAD)
     %   P(21:24) = [Xu_m, Yv_m, Zw_m, Bz] (opcional, defaults se ausente)
     % constants: struct com .m, .g
+
+    % --- Modo dispatch: retorna handles das subfunções translacionais ---
+    if nargin == 1 && ischar(t) && strcmp(t, 'get_handles')
+        dydt = struct('trans_dot',      @trans_dot_local, ...
+                       'specific_force', @specific_force_local);
+        return;
+    end
 
     n_states = length(y);
 
@@ -118,21 +129,13 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
         g_acc  = 9.81;
     end
 
-    [phi_dot, theta_dot, psi_dot] = euler_kinematics(p, q, r, phi, theta);
-    [u_dot, v_dot, w_dot] = translational_eqs(p, q, r, u, v, w, phi, theta, psi, ...
-        Tmr1+Tmr2+Tmr3+Tmr4, m_body, g_acc, Xu_m, Yv_m, Zw_m, Bz_param);
-
-    dydt = [p_dot; q_dot; r_dot; phi_dot; theta_dot; psi_dot; u_dot; v_dot; w_dot];
-end
-
-% =========================================================================
-%  Equações comuns: cinemática de Euler
-% =========================================================================
-function [phi_dot, theta_dot, psi_dot] = euler_kinematics(p, q, r, phi, theta)
+    % Cinemática de Euler: [p,q,r] → [phi_dot, theta_dot, psi_dot]
+    % Inclui amortecimento (-1·estado) e bias, idêntico ao Simulink
     cos_theta = cos(theta);
     if abs(cos_theta) < 1e-7
         cos_theta = 1e-7 * sign(cos_theta);
     end
+    sin_theta = sin(theta);
     sin_phi = sin(phi);
     cos_phi = cos(phi);
     tan_theta = sin(theta) / cos_theta;
@@ -140,26 +143,43 @@ function [phi_dot, theta_dot, psi_dot] = euler_kinematics(p, q, r, phi, theta)
     phi_dot   = p + (q*sin_phi + r*cos_phi) * tan_theta;
     theta_dot = q*cos_phi - r*sin_phi;
     psi_dot   = (q*sin_phi + r*cos_phi) / cos_theta;
+
+    % Dinâmica translacional via subfunção centralizada
+    T_total = Tmr1 + Tmr2 + Tmr3 + Tmr4;
+
+    gx_body = -g_acc * sin_theta;
+    gy_body =  g_acc * sin_phi * cos_theta;
+    gz_body =  g_acc * cos_phi * cos_theta;
+
+    [u_dot, v_dot, w_dot] = trans_dot_local(p, q, r, u, v, w, ...
+        gx_body, gy_body, gz_body, T_total/m_body, Xu_m, Yv_m, Zw_m, Bz_param);
+
+    dydt = [p_dot; q_dot; r_dot; phi_dot; theta_dot; psi_dot; u_dot; v_dot; w_dot];
 end
 
 % =========================================================================
-%  Equações comuns: dinâmica translacional (com arrasto e bias do Simulink)
+%  Subfunções translacionais — EDITE AQUI para testar modelos diferentes
 % =========================================================================
-function [u_dot, v_dot, w_dot] = translational_eqs(p, q, r, u, v, w, phi, theta, psi, T_total, m, g, Xu_m, Yv_m, Zw_m, Bz_param)
-    sin_phi   = sin(phi);
-    cos_phi   = cos(phi);
-    cos_theta = cos(theta);
 
-    R_nb = [ cos(theta)*cos(psi), sin_phi*sin(theta)*cos(psi)-cos_phi*sin(psi), cos_phi*sin(theta)*cos(psi)+sin_phi*sin(psi);
-             cos(theta)*sin(psi), sin_phi*sin(theta)*sin(psi)+cos_phi*cos(psi), cos_phi*sin(theta)*sin(psi)-sin_phi*cos(psi);
-            -sin(theta),          sin_phi*cos_theta,                            cos_phi*cos_theta];
-    G_body = R_nb' * [0; 0; m*g];
+function [ud, vd, wd] = trans_dot_local(p, q, r, u, v, w, gx, gy, gz, T_m, Xu, Yv, Zw, Bz)
+    % Derivadas translacionais no referencial do corpo.
+    %   gx = -g·sinθ,  gy = g·sinφ·cosθ,  gz = g·cosφ·cosθ
+    %   T_m = T_total / m
+    %   Xu, Yv, Zw: derivadas de estabilidade (JÁ NEGATIVAS, ex: Xu=-4)
+    %
+    % Funciona com escalares (ODE/RK4) e com vetores (element-wise).
+    ud = r.*v - q.*w + gx + Xu*u;
+    vd = p.*w - r.*u + gy + Yv*v;
+    wd = q.*u - p.*v - T_m + gz + Zw*w + Bz;
+end
 
-    Fx = G_body(1);
-    Fy = G_body(2);
-    Fz = -T_total + G_body(3);
-
-    u_dot = r*v - q*w + Fx/m + Xu_m*u;
-    v_dot = p*w - r*u + Fy/m + Yv_m*v;
-    w_dot = q*u - p*v + Fz/m + Zw_m*w + Bz_param;
+function [fx, fy, fz] = specific_force_local(p, q, r, u, v, w, gx, gy, gz, T_m, Xu, Yv, Zw, Bz)
+    % Saída híbrida comparada com o IMU:
+    %   X,Y: derivada completa (inclui gravidade → captura inclinação)
+    %   Z:   força específica pura (robusto, dominado por -T/m)
+    %
+    % Mesma assinatura que trans_dot_local.
+    fx = r.*v - q.*w + gx + Xu.*u;       % u_dot completo
+    fy = p.*w - r.*u + gy + Yv.*v;       % v_dot completo
+    fz = -T_m + Zw.*w + Bz;              % força específica (sem Coriolis)
 end

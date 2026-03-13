@@ -126,7 +126,7 @@ P0 = [Jx0; Jy0; Jz0; Jxz0;           ... % Inércias
       10; 5; 0.5;                  ... % Dp, Dq, Dr
       0.7; 1.4; 0.3;                  ... % Bp, Bq, Br
       0.0; 0.0;                        ... % dx_cg, dy_cg (chute: CG no CAD)
-      -4.0; -4.0; -0.1; -0.05];            % Xu_m, Yv_m, Zw_m, Bz
+      -4.0; -4.0; -0.1; -0.5];             % Xu_m, Yv_m, Zw_m, Bz
 
 lb = [0.032;  0.125;  0.058;  0.0001;   ... % Jx, Jy, Jz, Jxz (±50% do CAD)
       0.05; 0.05; 0.05; 0.05;         ... % k_T
@@ -372,6 +372,13 @@ fprintf('    G5=%8.4f  G6=%8.4f  G7=%8.4f  G8=%8.4f  InvJy=%8.4f\n', ...
     Jx_f/gam0_f, 1/Jy_f);
 
 %% ========================================================================
+%  8b. EXPORTAR PARÂMETROS PARA simulate.m
+%  ========================================================================
+params_file = fullfile(fileparts(mfilename('fullpath')), 'P_identified.mat');
+save(params_file, 'P_final', 'P0', 'param_names');
+fprintf('\n  Parâmetros exportados para: %s\n', params_file);
+
+%% ========================================================================
 %  9. VALIDAÇÃO COM P_final
 %  ========================================================================
 fprintf('\n==========================================================\n');
@@ -394,6 +401,27 @@ plot_torques(P_final, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val);
 
 % Diagnóstico: Forças Fx, Fy, Fz na janela de validação
 plot_forces(P_final, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val, res_final);
+
+%% ========================================================================
+%  9b. VALIDAÇÃO SEMI-ACOPLADA (consistente com a identificação)
+%  ========================================================================
+fprintf('\n==========================================================\n');
+fprintf('  VALIDAÇÃO SEMI-ACOPLADA (att medida + RK4 translacional)\n');
+fprintf('==========================================================\n');
+
+res_sc_final = simulate_full_semicoupled(P_final, sg.time, sg.pwm, sg.pqr, sg.acc, sg.att, ...
+    time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
+    func_T_ref, func_Q_ref, constants_sim, []);
+
+print_R2('P_final (semi-acoplado)', res_sc_final, sg.pqr, pqr_vl, sg.acc, acc_vl, ...
+    t_trains{1}, t_val, R2_func);
+
+plot_all_results('P_final (semi-acoplado)', ...
+    res_sc_final, sg.time, sg.pqr, sg.acc, time_vl, pqr_vl, acc_vl, R2_func, t_trains{1}, t_val, att_vl);
+
+res_sc_P0 = simulate_full_semicoupled(P0, sg.time, sg.pwm, sg.pqr, sg.acc, sg.att, ...
+    time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
+    func_T_ref, func_Q_ref, constants_sim, []);
 
 %% 10. RESUMO FINAL: P0 vs P_final (apenas validação)
 fprintf('\n==========================================================\n');
@@ -419,6 +447,13 @@ if res_final.full_vl_ok
     fprintf('    R² AccX=%.4f | AccY=%.4f | AccZ=%.4f\n', ...
         R2_func(acc_vl(:,1), res_final.accX_s_vl), R2_func(acc_vl(:,2), res_final.accY_s_vl), R2_func(acc_vl(:,3), res_final.accZ_s_vl));
 end
+fprintf('\n  --- Semi-acoplado (att medida + RK4 translacional) ---\n');
+fprintf('  [P0] Chute Inicial:\n');
+fprintf('    R² AccX=%.4f | AccY=%.4f | AccZ=%.4f\n', ...
+    R2_func(acc_vl(:,1), res_sc_P0.accX_s_vl), R2_func(acc_vl(:,2), res_sc_P0.accY_s_vl), R2_func(acc_vl(:,3), res_sc_P0.accZ_s_vl));
+fprintf('  [P_final] Após Otimização:\n');
+fprintf('    R² AccX=%.4f | AccY=%.4f | AccZ=%.4f\n', ...
+    R2_func(acc_vl(:,1), res_sc_final.accX_s_vl), R2_func(acc_vl(:,2), res_sc_final.accY_s_vl), R2_func(acc_vl(:,3), res_sc_final.accZ_s_vl));
 fprintf('==========================================================\n');
 
 disp('Script finalizado.');
@@ -461,6 +496,11 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
     win_starts, win_ends, weights_pqr, weights_acc, cost_mode)
 
     if nargin < 15, cost_mode = 'full'; end
+
+    % Obter handles centralizados do vtol_dynamics (edite apenas lá!)
+    dyn_h = vtol_dynamics('get_handles');
+    trans_dot_fn   = dyn_h.trans_dot;
+    spec_force_fn  = dyn_h.specific_force;
 
     % Inércias → constantes G (corpo rígido, consistência garantida)
     Jx = P(1); Jy = P(2); Jz = P(3); Jxz = P(4);
@@ -560,22 +600,51 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
     gy = g * cos(theta_r) .* sin(phi_r);
     gz = g * cos(theta_r) .* cos(phi_r);
 
+    % Integração translacional RK4 com sub-stepping (consistente c/ rotacional)
+    n_sub_t = n_sub;        % mesmo número de sub-passos
+    dt_sub_t = dt / n_sub_t;
+    h2_t = dt_sub_t / 2;
+
     u_int = zeros(N,1); v_int = zeros(N,1); w_int = zeros(N,1);
     for k = 1:N-1
         pk = pqr(k,1); qk = pqr(k,2); rk = pqr(k,3);
-        ud = rk*v_int(k) - qk*w_int(k) + gx(k) + Xu_m*u_int(k);
-        vd = pk*w_int(k) - rk*u_int(k) + gy(k) + Yv_m*v_int(k);
-        wd = qk*u_int(k) - pk*v_int(k) - T_total(k)/m + gz(k) + Zw_m*w_int(k) + Bz;
-        u_int(k+1) = u_int(k) + dt*ud;
-        v_int(k+1) = v_int(k) + dt*vd;
-        w_int(k+1) = w_int(k) + dt*wd;
+        gxk = gx(k); gyk = gy(k); gzk = gz(k);
+        Tk_m = T_total(k)/m;
+
+        us = u_int(k); vs = v_int(k); ws = w_int(k);
+        for si = 1:n_sub_t
+            % k1
+            [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            % k2
+            u2=us+h2_t*ud1; v2=vs+h2_t*vd1; w2=ws+h2_t*wd1;
+            [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            % k3
+            u3=us+h2_t*ud2; v3=vs+h2_t*vd2; w3=ws+h2_t*wd2;
+            [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            % k4
+            u4=us+dt_sub_t*ud3; v4=vs+dt_sub_t*vd3; w4=ws+dt_sub_t*wd3;
+            [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            % update
+            us = us + dt_sub_t/6*(ud1 + 2*ud2 + 2*ud3 + ud4);
+            vs = vs + dt_sub_t/6*(vd1 + 2*vd2 + 2*vd3 + vd4);
+            ws = ws + dt_sub_t/6*(wd1 + 2*wd2 + 2*wd3 + wd4);
+        end
+
+        if ~isfinite(us), us = MAX_VAL; end
+        if ~isfinite(vs), vs = MAX_VAL; end
+        if ~isfinite(ws), ws = MAX_VAL; end
+        us = max(min(us, MAX_VAL), -MAX_VAL);
+        vs = max(min(vs, MAX_VAL), -MAX_VAL);
+        ws = max(min(ws, MAX_VAL), -MAX_VAL);
+
+        u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
     end
 
-    % Força específica = aceleração inercial - gravidade_body
-    % IMU mede f_esp, não aceleração inercial
-    accX_m = pqr(:,3).*v_int - pqr(:,2).*w_int + Xu_m*u_int;
-    accY_m = pqr(:,1).*w_int - pqr(:,3).*u_int + Yv_m*v_int;
-    accZ_m = pqr(:,2).*u_int - pqr(:,1).*v_int - T_total/m + Zw_m*w_int + Bz;
+    % Saída do modelo (derivada completa, gz subtraído em z) — via subfunção centralizada
+    [accX_m, accY_m, accZ_m] = spec_force_fn( ...
+        pqr(:,1), pqr(:,2), pqr(:,3), ...
+        u_int, v_int, w_int, ...
+        gx, gy, gz, T_total/m, Xu_m, Yv_m, Zw_m, Bz);
 
     sw_a = sqrt(weights_acc(:));
     e_acc = [sw_a(1)*(acc(:,1) - accX_m); ...
@@ -594,17 +663,14 @@ end
 function res = simulate_full(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, ...
     time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
     func_T_ref, func_Q_ref, constants_sim, ode_opts)
-% Simulação completa model-driven (replica estrutura do Simulink):
-%   Etapa 1: Rotacional  (3 estados) → p, q, r
-%   Etapa 2: Cinemática  (3 estados) → phi, theta, psi  (com p,q,r simulados)
-%   Etapa 3: Translacional (3 estados) → u, v, w        (com p,q,r e att simulados)
-% Cada etapa usa ode45 independente — evita contaminação numérica entre subsistemas.
-% Totalmente model-driven: nenhum dado medido alimenta a simulação.
+% Simulação completa model-driven usando integração unificada de 9 estados.
+% Replica exatamente o Simulink: todos os subsistemas (rotacional, cinemática,
+% translacional) são integrados simultaneamente no mesmo solver.
+% Nenhum dado medido alimenta a simulação — totalmente model-driven.
 
     N_tr = length(time_tr);
     N_vl = length(time_vl);
     g = constants_sim.g;
-    m = constants_sim.m;
 
     res = simulate_one_window(P, time_tr, pwm_tr, pqr_tr, att_tr, N_tr, ...
         func_T_ref, func_Q_ref, constants_sim, ode_opts, g, 'tr');
@@ -620,133 +686,165 @@ end
 
 function res = simulate_one_window(P, time, pwm, pqr, att, N, ...
     func_T_ref, func_Q_ref, constants_sim, ode_opts, g, suffix)
-% Integração sequencial de uma janela (treino ou validação)
+% Integração unificada de 9 estados via vtol_dynamics.
+%
+%   y = [p; q; r; phi; theta; psi; u; v; w]
+%
+% Todos os subsistemas (rotacional, cinemática de Euler, translacional) são
+% integrados simultaneamente pelo mesmo solver — idêntico ao Simulink.
+% Nenhuma interpolação entre etapas, nenhuma reamostragem.
 
     nan3 = NaN(N,1);
 
-    % === Etapa 1: Rotacional (3 estados) ===
-    ode_rot = @(t,y) vtol_dynamics(t, y, P, time, pwm, func_T_ref, func_Q_ref);
+    % Condição inicial: [p,q,r] e [phi,theta,psi] dos dados medidos, [u,v,w]=0
+    att_rad0 = deg2rad(att(1,:));
+    y0 = [pqr(1,:)'; att_rad0(:); 0; 0; 0];
+
+    % Integração unificada de 9 estados
+    ode_func = @(t,y) vtol_dynamics(t, y, P, time, pwm, func_T_ref, func_Q_ref, constants_sim);
     try
-        [t_s, y_s] = ode45(ode_rot, time, pqr(1,:)', ode_opts);
-        pqr_sim = interp1(t_s, y_s, time, 'linear', 'extrap');
-        res.(['p_s_' suffix]) = pqr_sim(:,1);
-        res.(['q_s_' suffix]) = pqr_sim(:,2);
-        res.(['r_s_' suffix]) = pqr_sim(:,3);
+        [t_s, y_s] = ode45(ode_func, time, y0, ode_opts);
+        y_out = interp1(t_s, y_s, time, 'linear', 'extrap');
+
+        % Extrair estados
+        res.(['p_s_' suffix]) = y_out(:,1);
+        res.(['q_s_' suffix]) = y_out(:,2);
+        res.(['r_s_' suffix]) = y_out(:,3);
         res.(['pqr_' suffix '_ok']) = true;
-    catch
+
+        res.(['phi_s_' suffix])   = rad2deg(y_out(:,4));
+        res.(['theta_s_' suffix]) = rad2deg(y_out(:,5));
+        res.(['psi_s_' suffix])   = rad2deg(y_out(:,6));
+
+        % Força específica via subfunção centralizada do vtol_dynamics
+        dyn_h = vtol_dynamics('get_handles');
+        spec_force_fn = dyn_h.specific_force;
+
+        Xu_m_p = P(21); Yv_m_p = P(22); Zw_m_p = P(23); Bz_p = P(24);
+        k_T_p = P(5:8);
+        m_val = constants_sim.m;
+
+        T_vec = zeros(N,1);
+        for k = 1:N
+            for j = 1:4
+                T_vec(k) = T_vec(k) + k_T_p(j) * func_T_ref(pwm(k,j));
+            end
+        end
+        g_val = constants_sim.g;
+        gx_sw = -g_val * sin(y_out(:,5));
+        gy_sw =  g_val * sin(y_out(:,4)) .* cos(y_out(:,5));
+        gz_sw =  g_val * cos(y_out(:,4)) .* cos(y_out(:,5));
+        [accX, accY, accZ] = spec_force_fn( ...
+            y_out(:,1), y_out(:,2), y_out(:,3), ...
+            y_out(:,7), y_out(:,8), y_out(:,9), ...
+            gx_sw, gy_sw, gz_sw, T_vec/m_val, Xu_m_p, Yv_m_p, Zw_m_p, Bz_p);
+        res.(['accX_s_' suffix]) = accX;
+        res.(['accY_s_' suffix]) = accY;
+        res.(['accZ_s_' suffix]) = accZ;
+        res.(['full_' suffix '_ok']) = true;
+
+    catch ME
+        fprintf('  [%s] ode45 9-estados falhou: %s\n', suffix, ME.message);
         res.(['p_s_' suffix]) = nan3; res.(['q_s_' suffix]) = nan3; res.(['r_s_' suffix]) = nan3;
         res.(['phi_s_' suffix]) = nan3; res.(['theta_s_' suffix]) = nan3; res.(['psi_s_' suffix]) = nan3;
         res.(['accX_s_' suffix]) = nan3; res.(['accY_s_' suffix]) = nan3; res.(['accZ_s_' suffix]) = nan3;
         res.(['pqr_' suffix '_ok']) = false;
         res.(['full_' suffix '_ok']) = false;
-        return;
     end
+end
 
-    % === Etapa 2: Cinemática Euler (3 estados, usa p,q,r SIMULADOS) ===
-    att_rad0 = deg2rad(att(1,:))';
-    ode_kin = @(t,y) kin_ode(t, y, time, pqr_sim);
-    try
-        [t_s, y_s] = ode45(ode_kin, time, att_rad0, ode_opts);
-        att_sim_rad = interp1(t_s, y_s, time, 'linear', 'extrap');
-        res.(['phi_s_' suffix])   = rad2deg(att_sim_rad(:,1));
-        res.(['theta_s_' suffix]) = rad2deg(att_sim_rad(:,2));
-        res.(['psi_s_' suffix])   = rad2deg(att_sim_rad(:,3));
-    catch
-        att_sim_rad = repmat(att_rad0', N, 1);  % fallback: atitude constante
-        res.(['phi_s_' suffix]) = nan3; res.(['theta_s_' suffix]) = nan3; res.(['psi_s_' suffix]) = nan3;
-    end
+function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, ...
+    time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
+    func_T_ref, func_Q_ref, constants_sim, ~)
+% Validação semi-acoplada: usa p,q,r e atitude MEDIDOS, integra apenas u,v,w.
+% Consistente com oem_ms_cost_func (mesma lógica que a identificação usa).
+% Retorna struct com mesmos campos que simulate_full (compatível com plots).
 
-    % === Etapa 3: Translacional (3 estados, usa p,q,r e att SIMULADOS) ===
-    ode_trans = @(t,y) trans_ode(t, y, P, time, pwm, pqr_sim, att_sim_rad, func_T_ref, constants_sim);
-    try
-        [t_s, y_s] = ode45(ode_trans, time, [0;0;0], ode_opts);
-        uvw_sim = interp1(t_s, y_s, time, 'linear', 'extrap');
+    dyn_h = vtol_dynamics('get_handles');
+    trans_dot_fn  = dyn_h.trans_dot;
+    spec_force_fn = dyn_h.specific_force;
 
-        % Força específica: acc_modelo = u_dot - g_body
-        accX = zeros(N,1); accY = zeros(N,1); accZ = zeros(N,1);
+    g = constants_sim.g;
+    m = constants_sim.m;
+    k_T = P(5:8);
+    Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
+
+    res = struct();
+    datasets = {{'tr', time_tr, pwm_tr, pqr_tr, acc_tr, att_tr}, ...
+                {'vl', time_vl, pwm_vl, pqr_vl, acc_vl, att_vl}};
+
+    for d = 1:2
+        suffix = datasets{d}{1};
+        time   = datasets{d}{2};
+        pwm    = datasets{d}{3};
+        pqr    = datasets{d}{4};
+        att    = datasets{d}{6};
+        N      = length(time);
+        dt     = time(2) - time(1);
+
+        % p,q,r e atitude = dados medidos (sem modelo rotacional)
+        res.(['p_s_' suffix]) = pqr(:,1);
+        res.(['q_s_' suffix]) = pqr(:,2);
+        res.(['r_s_' suffix]) = pqr(:,3);
+        res.(['pqr_' suffix '_ok']) = true;
+
+        res.(['phi_s_' suffix])   = att(:,1);
+        res.(['theta_s_' suffix]) = att(:,2);
+        res.(['psi_s_' suffix])   = att(:,3);
+
+        % Empuxo total
+        T_total = zeros(N,1);
         for k = 1:N
-            dy = trans_ode(time(k), uvw_sim(k,:)', P, time, pwm, pqr_sim, att_sim_rad, func_T_ref, constants_sim);
-            phi_k   = att_sim_rad(k,1);
-            theta_k = att_sim_rad(k,2);
-            gx_k = -g * sin(theta_k);
-            gy_k =  g * cos(theta_k) * sin(phi_k);
-            gz_k =  g * cos(theta_k) * cos(phi_k);
-            accX(k) = dy(1) - gx_k;
-            accY(k) = dy(2) - gy_k;
-            accZ(k) = dy(3) - gz_k;
+            for j = 1:4
+                T_total(k) = T_total(k) + k_T(j) * func_T_ref(pwm(k,j));
+            end
         end
+
+        % Gravidade projetada a partir de atitude MEDIDA
+        att_rad = deg2rad(att);
+        phi_m = att_rad(:,1); theta_m = att_rad(:,2);
+        gx = -g * sin(theta_m);
+        gy =  g * cos(theta_m) .* sin(phi_m);
+        gz =  g * cos(theta_m) .* cos(phi_m);
+
+        % RK4 translacional com sub-stepping (u,v,w apenas)
+        n_sub = 5;
+        dt_sub = dt / n_sub;
+        h2 = dt_sub / 2;
+
+        u_int = zeros(N,1); v_int = zeros(N,1); w_int = zeros(N,1);
+        for k = 1:N-1
+            pk = pqr(k,1); qk = pqr(k,2); rk = pqr(k,3);
+            gxk = gx(k); gyk = gy(k); gzk = gz(k);
+            Tk_m = T_total(k)/m;
+
+            us = u_int(k); vs = v_int(k); ws = w_int(k);
+            for si = 1:n_sub
+                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                u2=us+h2*ud1; v2=vs+h2*vd1; w2=ws+h2*wd1;
+                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                u3=us+h2*ud2; v3=vs+h2*vd2; w3=ws+h2*wd2;
+                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                u4=us+dt_sub*ud3; v4=vs+dt_sub*vd3; w4=ws+dt_sub*wd3;
+                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                us = us + dt_sub/6*(ud1+2*ud2+2*ud3+ud4);
+                vs = vs + dt_sub/6*(vd1+2*vd2+2*vd3+vd4);
+                ws = ws + dt_sub/6*(wd1+2*wd2+2*wd3+wd4);
+            end
+            u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
+        end
+
+        % Saída do modelo via subfunção centralizada
+        [accX, accY, accZ] = spec_force_fn( ...
+            pqr(:,1), pqr(:,2), pqr(:,3), ...
+            u_int, v_int, w_int, ...
+            gx, gy, gz, T_total/m, Xu_m, Yv_m, Zw_m, Bz);
+
         res.(['accX_s_' suffix]) = accX;
         res.(['accY_s_' suffix]) = accY;
         res.(['accZ_s_' suffix]) = accZ;
         res.(['full_' suffix '_ok']) = true;
-    catch
-        res.(['accX_s_' suffix]) = nan3; res.(['accY_s_' suffix]) = nan3; res.(['accZ_s_' suffix]) = nan3;
-        res.(['full_' suffix '_ok']) = false;
     end
-end
-
-% =========================================================================
-%  ODE auxiliar: Cinemática de Euler  y = [phi; theta; psi]
-%  Usa p,q,r simulados interpolados
-% =========================================================================
-function dydt = kin_ode(t, y, time_data, pqr_data)
-    phi = y(1); theta = y(2);
-    p = interp1(time_data, pqr_data(:,1), t, 'linear', 'extrap');
-    q = interp1(time_data, pqr_data(:,2), t, 'linear', 'extrap');
-    r = interp1(time_data, pqr_data(:,3), t, 'linear', 'extrap');
-
-    ct = cos(theta);
-    if abs(ct) < 1e-7, ct = 1e-7 * sign(ct); end
-    sp = sin(phi); cp = cos(phi);
-    tt = sin(theta) / ct;
-
-    dydt = [p + (q*sp + r*cp)*tt;
-            q*cp - r*sp;
-            (q*sp + r*cp)/ct];
-end
-
-% =========================================================================
-%  ODE auxiliar: Translacional  y = [u; v; w]
-%  Usa p,q,r e atitude SIMULADOS interpolados
-% =========================================================================
-function dydt = trans_ode(t, y, P, time_data, pwm_data, pqr_data, att_data, func_T_ref, constants)
-    u = y(1); v = y(2); w = y(3);
-
-    p = interp1(time_data, pqr_data(:,1), t, 'linear', 'extrap');
-    q = interp1(time_data, pqr_data(:,2), t, 'linear', 'extrap');
-    r = interp1(time_data, pqr_data(:,3), t, 'linear', 'extrap');
-    phi   = interp1(time_data, att_data(:,1), t, 'linear', 'extrap');
-    theta = interp1(time_data, att_data(:,2), t, 'linear', 'extrap');
-    psi   = interp1(time_data, att_data(:,3), t, 'linear', 'extrap');
-
-    k_T = P(5:8);
-    cpwm = zeros(1,4);
-    for i = 1:4
-        cpwm(i) = interp1(time_data, pwm_data(:,i), t, 'linear', 'extrap');
-    end
-    T_total = k_T(1)*func_T_ref(cpwm(1)) + k_T(2)*func_T_ref(cpwm(2)) + ...
-              k_T(3)*func_T_ref(cpwm(3)) + k_T(4)*func_T_ref(cpwm(4));
-
-    m_body = constants.m;  g_acc = constants.g;
-    if length(P) >= 24
-        Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
-    else
-        Xu_m = -4.0; Yv_m = -4.0; Zw_m = -0.1; Bz = -0.5;
-    end
-
-    sp = sin(phi); cp = cos(phi); ct = cos(theta);
-    R_nb = [ cos(theta)*cos(psi), sp*sin(theta)*cos(psi)-cp*sin(psi), cp*sin(theta)*cos(psi)+sp*sin(psi);
-             cos(theta)*sin(psi), sp*sin(theta)*sin(psi)+cp*cos(psi), cp*sin(theta)*sin(psi)-sp*cos(psi);
-            -sin(theta),          sp*ct,                               cp*ct];
-    G_body = R_nb' * [0; 0; m_body*g_acc];
-
-    Fx = G_body(1);
-    Fy = G_body(2);
-    Fz = -T_total + G_body(3);
-
-    dydt = [r*v - q*w + Fx/m_body + Xu_m*u;
-            p*w - r*u + Fy/m_body + Yv_m*v;
-            q*u - p*v + Fz/m_body + Zw_m*w + Bz];
 end
 
 function print_R2(label, res, ~, pqr_vl, ~, acc_vl, ~, t_val, R2_func)
