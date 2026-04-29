@@ -12,6 +12,11 @@
 % pelo mesmo solver, sem interpolacao entre etapas.
 
 %% ========================================================================
+%  0. FUNCOES AUXILIARES
+%  ========================================================================
+ternary = @(cond, a, b) subsref({b, a}, struct('type','{}','subs',{{cond+1}}));
+
+%% ========================================================================
 %  1. CONFIGURACAO
 %  ========================================================================
 % Trecho de tempo a simular (segundos do log)
@@ -147,6 +152,39 @@ v_sim     = y_out(:,8);
 w_sim     = y_out(:,9);
 
 %% ========================================================================
+%  5b. INTEGRACAO MODELO LINEARIZADO (se linear_model.mat existir)
+%  ========================================================================
+linear_mat = fullfile(fileparts(mfilename('fullpath')), 'linear_model.mat');
+has_linear = exist(linear_mat, 'file') == 2;
+
+if has_linear
+    fprintf('\nCarregando modelo linear de: %s\n', linear_mat);
+    lin = load(linear_mat);
+
+    fprintf('Integrando modelo linearizado via ode45...\n');
+    ode_lin = @(t,y) vtol_dynamics_linearized(t, y, lin.A, lin.B, lin.f0, ...
+        lin.x0, lin.u0, time, pwm);
+    tic;
+    [t_lin, y_lin] = ode45(ode_lin, time, y0, ode_opts);
+    tempo_lin = toc;
+    fprintf('Integracao linear concluida em %.2f s\n', tempo_lin);
+
+    y_lin_out = interp1(t_lin, y_lin, time, 'linear', 'extrap');
+    p_lin     = y_lin_out(:,1);
+    q_lin     = y_lin_out(:,2);
+    r_lin     = y_lin_out(:,3);
+    phi_lin   = rad2deg(y_lin_out(:,4));
+    theta_lin = rad2deg(y_lin_out(:,5));
+    psi_lin   = rad2deg(y_lin_out(:,6));
+    u_lin     = y_lin_out(:,7);
+    v_lin     = y_lin_out(:,8);
+    w_lin     = y_lin_out(:,9);
+else
+    fprintf('\nModelo linear nao encontrado. Execute linearize.m primeiro.\n');
+    fprintf('Simulando apenas o modelo nao-linear.\n');
+end
+
+%% ========================================================================
 %  6. CALCULO DA FORCA ESPECIFICA (AccX, AccY, AccZ)
 %  ========================================================================
 % Utiliza subfunções centralizadas do vtol_dynamics.m.
@@ -185,6 +223,20 @@ gz =  g * cos(y_out(:,4)) .* cos(y_out(:,5));
     y_out(:,1), y_out(:,2), y_out(:,3), ...
     y_out(:,7), y_out(:,8), y_out(:,9), ...
     gx, gy, gz, T_vec/m, Xu_m, Yv_m, Zw_m, Bz);
+
+%% ========================================================================
+%  6a. FORCA ESPECIFICA DO MODELO LINEARIZADO
+%  ========================================================================
+if has_linear
+    gx_lin = -g * sin(y_lin_out(:,5));
+    gy_lin =  g * sin(y_lin_out(:,4)) .* cos(y_lin_out(:,5));
+    gz_lin =  g * cos(y_lin_out(:,4)) .* cos(y_lin_out(:,5));
+
+    [accX_lin, accY_lin, accZ_lin] = spec_force_fn( ...
+        y_lin_out(:,1), y_lin_out(:,2), y_lin_out(:,3), ...
+        y_lin_out(:,7), y_lin_out(:,8), y_lin_out(:,9), ...
+        gx_lin, gy_lin, gz_lin, T_vec/m, Xu_m, Yv_m, Zw_m, Bz);
+end
 
 %% ========================================================================
 %  6b. DIAGNOSTICO: TRANSLACIONAL COM ATITUDE MEDIDA (isola erros de att)
@@ -259,21 +311,54 @@ R2_ax_diag = R2(acc(:,1), accX_diag);
 R2_ay_diag = R2(acc(:,2), accY_diag);
 R2_az_diag = R2(acc(:,3), accZ_diag);
 
+R2_p_lin = NaN; R2_q_lin = NaN; R2_r_lin = NaN;
+R2_phi_lin = NaN; R2_theta_lin = NaN; R2_psi_lin = NaN;
+R2_ax_lin = NaN; R2_ay_lin = NaN; R2_az_lin = NaN;
+if has_linear
+    R2_p_lin = R2(pqr(:,1), p_lin);
+    R2_q_lin = R2(pqr(:,2), q_lin);
+    R2_r_lin = R2(pqr(:,3), r_lin);
+    R2_phi_lin   = R2(att(:,1), phi_lin);
+    R2_theta_lin = R2(att(:,2), theta_lin);
+    R2_psi_lin   = R2(att(:,3), psi_lin);
+    R2_ax_lin = R2(acc(:,1), accX_lin);
+    R2_ay_lin = R2(acc(:,2), accY_lin);
+    R2_az_lin = R2(acc(:,3), accZ_lin);
+end
+
 fprintf('\n==========================================================\n');
 fprintf('  RESULTADOS — Trecho [%d-%ds]\n', t_range(1), t_range(2));
 fprintf('==========================================================\n');
-fprintf('  Vel. Angulares:\n');
-fprintf('    R2 p = %.4f\n', R2_p);
-fprintf('    R2 q = %.4f\n', R2_q);
-fprintf('    R2 r = %.4f\n', R2_r);
+fprintf('  Vel. Angulares:           NL         Linear\n');
+fprintf('    R2 p = %.4f', R2_p);
+if has_linear, fprintf('      %.4f', R2_p_lin); end
+fprintf('\n');
+fprintf('    R2 q = %.4f', R2_q);
+if has_linear, fprintf('      %.4f', R2_q_lin); end
+fprintf('\n');
+fprintf('    R2 r = %.4f', R2_r);
+if has_linear, fprintf('      %.4f', R2_r_lin); end
+fprintf('\n');
 fprintf('  Atitude:\n');
-fprintf('    R2 phi   = %.4f\n', R2_phi);
-fprintf('    R2 theta = %.4f\n', R2_theta);
-fprintf('    R2 psi   = %.4f\n', R2_psi);
-fprintf('  Aceleracoes (9-estados, atitude integrada):\n');
-fprintf('    R2 AccX = %.4f\n', R2_ax);
-fprintf('    R2 AccY = %.4f\n', R2_ay);
-fprintf('    R2 AccZ = %.4f\n', R2_az);
+fprintf('    R2 phi   = %.4f', R2_phi);
+if has_linear, fprintf('      %.4f', R2_phi_lin); end
+fprintf('\n');
+fprintf('    R2 theta = %.4f', R2_theta);
+if has_linear, fprintf('      %.4f', R2_theta_lin); end
+fprintf('\n');
+fprintf('    R2 psi   = %.4f', R2_psi);
+if has_linear, fprintf('      %.4f', R2_psi_lin); end
+fprintf('\n');
+fprintf('  Aceleracoes (9-estados):\n');
+fprintf('    R2 AccX = %.4f', R2_ax);
+if has_linear, fprintf('      %.4f', R2_ax_lin); end
+fprintf('\n');
+fprintf('    R2 AccY = %.4f', R2_ay);
+if has_linear, fprintf('      %.4f', R2_ay_lin); end
+fprintf('\n');
+fprintf('    R2 AccZ = %.4f', R2_az);
+if has_linear, fprintf('      %.4f', R2_az_lin); end
+fprintf('\n');
 fprintf('  Aceleracoes (DIAGNOSTICO, atitude medida):\n');
 fprintf('    R2 AccX = %.4f\n', R2_ax_diag);
 fprintf('    R2 AccY = %.4f\n', R2_ay_diag);
@@ -289,23 +374,35 @@ lbl = sprintf('[%d-%ds]', t_range(1), t_range(2));
 fig1 = figure('Name', 'pqr', 'Position', [80 50 900 500], 'Visible', 'off');
 
 ax1=subplot(3,1,1);
-plot(time, pqr(:,1), 'b-', time, p_sim, 'r--', 'LineWidth', 1.3);
-legend('Experimental', 'Simulado', 'Location', 'best'); ylabel('p (rad/s)');
-title(sprintf('%s — p  (R^2 = %.3f)', lbl, R2_p)); grid on;
+plot(time, pqr(:,1), 'b-', time, p_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, p_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('Experimental', 'NL', 'Linear', 'Location', 'best');
+else legend('Experimental', 'Simulado', 'Location', 'best'); end
+ylabel('p (rad/s)');
+title(sprintf('%s — p  (R^2 NL=%.3f%s)', lbl, R2_p, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_p_lin), ''))); grid on;
 yd = [pqr(:,1); p_sim]; yr = max(yd)-min(yd); if yr<1e-6, yr=1; end
 ylim([min(yd)-0.5*yr, max(yd)+0.5*yr]);
 
 ax2=subplot(3,1,2);
-plot(time, pqr(:,2), 'b-', time, q_sim, 'r--', 'LineWidth', 1.3);
-legend('Experimental', 'Simulado', 'Location', 'best'); ylabel('q (rad/s)');
-title(sprintf('%s — q  (R^2 = %.3f)', lbl, R2_q)); grid on;
+plot(time, pqr(:,2), 'b-', time, q_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, q_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('Experimental', 'NL', 'Linear', 'Location', 'best');
+else legend('Experimental', 'Simulado', 'Location', 'best'); end
+ylabel('q (rad/s)');
+title(sprintf('%s — q  (R^2 NL=%.3f%s)', lbl, R2_q, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_q_lin), ''))); grid on;
 yd = [pqr(:,2); q_sim]; yr = max(yd)-min(yd); if yr<1e-6, yr=1; end
 ylim([min(yd)-0.5*yr, max(yd)+0.5*yr]);
 
 ax3=subplot(3,1,3);
-plot(time, pqr(:,3), 'b-', time, r_sim, 'r--', 'LineWidth', 1.3);
-legend('Experimental', 'Simulado', 'Location', 'best'); ylabel('r (rad/s)'); xlabel('Tempo (s)');
-title(sprintf('%s — r  (R^2 = %.3f)', lbl, R2_r)); grid on;
+plot(time, pqr(:,3), 'b-', time, r_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, r_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('Experimental', 'NL', 'Linear', 'Location', 'best');
+else legend('Experimental', 'Simulado', 'Location', 'best'); end
+ylabel('r (rad/s)'); xlabel('Tempo (s)');
+title(sprintf('%s — r  (R^2 NL=%.3f%s)', lbl, R2_r, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_r_lin), ''))); grid on;
 yd = [pqr(:,3); r_sim]; yr = max(yd)-min(yd); if yr<1e-6, yr=1; end
 ylim([min(yd)-0.5*yr, max(yd)+0.5*yr]);
 
@@ -318,19 +415,28 @@ fprintf('Salvo: %s\n', fullfile(output_dir, 'pqr.png'));
 fig2 = figure('Name', 'att', 'Position', [120 90 900 700], 'Visible', 'off');
 
 subplot(3,1,1);
-plot(time, att(:,1), 'b-', time, phi_sim, 'r--', 'LineWidth', 1.3);
-legend('EKF', 'Simulado'); ylabel('\phi (graus)');
-title(sprintf('%s — \\phi  (R^2 = %.3f)', lbl, R2_phi)); grid on;
+plot(time, att(:,1), 'b-', time, phi_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, phi_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('EKF', 'NL', 'Linear'); else legend('EKF', 'Simulado'); end
+ylabel('\phi (graus)');
+title(sprintf('%s — \\phi  (R^2 NL=%.3f%s)', lbl, R2_phi, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_phi_lin), ''))); grid on;
 
 subplot(3,1,2);
-plot(time, att(:,2), 'b-', time, theta_sim, 'r--', 'LineWidth', 1.3);
-legend('EKF', 'Simulado'); ylabel('\theta (graus)');
-title(sprintf('%s — \\theta  (R^2 = %.3f)', lbl, R2_theta)); grid on;
+plot(time, att(:,2), 'b-', time, theta_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, theta_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('EKF', 'NL', 'Linear'); else legend('EKF', 'Simulado'); end
+ylabel('\theta (graus)');
+title(sprintf('%s — \\theta  (R^2 NL=%.3f%s)', lbl, R2_theta, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_theta_lin), ''))); grid on;
 
 subplot(3,1,3);
-plot(time, att(:,3), 'b-', time, psi_sim, 'r--', 'LineWidth', 1.3);
-legend('EKF', 'Simulado'); ylabel('\psi (graus)'); xlabel('Tempo (s)');
-title(sprintf('%s — \\psi  (R^2 = %.3f)', lbl, R2_psi)); grid on;
+plot(time, att(:,3), 'b-', time, psi_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, psi_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('EKF', 'NL', 'Linear'); else legend('EKF', 'Simulado'); end
+ylabel('\psi (graus)'); xlabel('Tempo (s)');
+title(sprintf('%s — \\psi  (R^2 NL=%.3f%s)', lbl, R2_psi, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_psi_lin), ''))); grid on;
 
 sgtitle(sprintf('Atitude — %s', lbl));
 saveas(fig2, fullfile(output_dir, 'att.png'));
@@ -340,23 +446,35 @@ fprintf('Salvo: %s\n', fullfile(output_dir, 'att.png'));
 fig3 = figure('Name', 'acc', 'Position', [160 130 900 500], 'Visible', 'off');
 
 ax1=subplot(3,1,1);
-plot(time, acc(:,1), 'b-', time, accX_sim, 'r--', 'LineWidth', 1.3);
-legend('IMU', 'Simulado', 'Location', 'best'); ylabel('AccX (m/s^2)');
-title(sprintf('%s — AccX  (R^2 = %.3f)', lbl, R2_ax)); grid on;
+plot(time, acc(:,1), 'b-', time, accX_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, accX_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('IMU', 'NL', 'Linear', 'Location', 'best');
+else legend('IMU', 'Simulado', 'Location', 'best'); end
+ylabel('AccX (m/s^2)');
+title(sprintf('%s — AccX  (R^2 NL=%.3f%s)', lbl, R2_ax, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_ax_lin), ''))); grid on;
 yd = acc(:,1); yr = max(yd)-min(yd); if yr<1e-6, yr=1; end
 ylim([min(yd)-0.5*yr, max(yd)+0.5*yr]);
 
 ax2=subplot(3,1,2);
-plot(time, acc(:,2), 'b-', time, accY_sim, 'r--', 'LineWidth', 1.3);
-legend('IMU', 'Simulado', 'Location', 'best'); ylabel('AccY (m/s^2)');
-title(sprintf('%s — AccY  (R^2 = %.3f)', lbl, R2_ay)); grid on;
+plot(time, acc(:,2), 'b-', time, accY_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, accY_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('IMU', 'NL', 'Linear', 'Location', 'best');
+else legend('IMU', 'Simulado', 'Location', 'best'); end
+ylabel('AccY (m/s^2)');
+title(sprintf('%s — AccY  (R^2 NL=%.3f%s)', lbl, R2_ay, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_ay_lin), ''))); grid on;
 yd = acc(:,2); yr = max(yd)-min(yd); if yr<1e-6, yr=1; end
 ylim([min(yd)-0.5*yr, max(yd)+0.5*yr]);
 
 ax3=subplot(3,1,3);
-plot(time, acc(:,3), 'b-', time, accZ_sim, 'r--', 'LineWidth', 1.3);
-legend('IMU', 'Simulado', 'Location', 'best'); ylabel('AccZ (m/s^2)'); xlabel('Tempo (s)');
-title(sprintf('%s — AccZ  (R^2 = %.3f)', lbl, R2_az)); grid on;
+plot(time, acc(:,3), 'b-', time, accZ_sim, 'r--', 'LineWidth', 1.3); hold on;
+if has_linear, plot(time, accZ_lin, 'g-.', 'LineWidth', 1.3); end; hold off;
+if has_linear, legend('IMU', 'NL', 'Linear', 'Location', 'best');
+else legend('IMU', 'Simulado', 'Location', 'best'); end
+ylabel('AccZ (m/s^2)'); xlabel('Tempo (s)');
+title(sprintf('%s — AccZ  (R^2 NL=%.3f%s)', lbl, R2_az, ...
+    ternary(has_linear, sprintf(', Lin=%.3f', R2_az_lin), ''))); grid on;
 yd = acc(:,3); yr = max(yd)-min(yd); if yr<1e-6, yr=1; end
 ylim([min(yd)-0.5*yr, max(yd)+0.5*yr]);
 
