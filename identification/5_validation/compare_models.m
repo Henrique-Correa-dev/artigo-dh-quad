@@ -98,16 +98,16 @@ acc_meas   = struct('x', ref.acc(:,1), 'y', ref.acc(:,2), 'z', ref.acc(:,3));
 % --- 4) Tabela de erros (v4 vs script) ---
 print_error_table(state_v4, state_script, acc_v4, acc_script);
 
-% --- 5) Plot 2x3: p,q,r + acc_x,acc_y,acc_z ---
+% --- 5) Plot 3x3: pqr + atitude + aceleracoes ---
 sim_dict = struct( ...
     'v4',     pack_sim(state_v4, acc_v4), ...
     'script', pack_sim(state_script, acc_script));
-meas_dict = pack_meas(ref.pqr, struct2acc(acc_meas));
+meas_dict = pack_meas(ref.pqr, struct2acc(acc_meas), ref.att_deg);
 
 title_str = sprintf('Comparacao v4 vs script vs medido | janela %g-%g s', ...
     ref.time_abs(1), ref.time_abs(end));
 
-plot_2x3_pqr_acc(ref.time, sim_dict, meas_dict, title_str, ...
+plot_3x3_full(ref.time, sim_dict, meas_dict, title_str, ...
     fullfile(setup_paths().images, 'compare_v4_vs_script.png'));
 end
 
@@ -318,9 +318,11 @@ function [func_T, func_Q] = build_motor_models()
 end
 
 function c = build_constants(tau_motor)
-c = struct('m', 1.6011, 'g', 9.81, 'tau_motor', tau_motor);
-% NOTA: massa 1.6011 mantida para consistência com Massa block do v4.slx.
-% Atualizar para 2.20 só depois que v4.slx também for atualizado.
+% Massa e gravidade vêm de parameters.m (fonte única — slide oficial)
+p = parameters();
+c = struct('m', p.m, 'g', p.g, 'tau_motor', tau_motor);
+% ATENÇÃO: o v4.slx ainda usa massa 1.6011 no bloco Massa. Para máxima
+% consistência com .slx, manter v4.slx atualizado também (task #72 parcial).
 end
 
 function P_J = default_P0()
@@ -331,13 +333,16 @@ end
 
 function y0 = build_y0_17(P_J, pwm0, phi0, theta0, psi0, func_T, func_Q)
 % 17 estados: [p q r phi theta psi u v w T_eff(1:4) Q_eff(1:4)]
+%
+% ICs de p,q,r: [0; -0.1; -0.1] para CASAR com os integradores
+% hardcoded do quad_model_v4.slx. Mudar aqui se v4.slx for atualizado.
 T_eff = zeros(4,1); Q_eff = zeros(4,1);
 k_T = P_J(5:8); k_Q = P_J(9:12);
 for i = 1:4
     T_eff(i) = k_T(i) * func_T(pwm0(i));
     Q_eff(i) = k_Q(i) * func_Q(pwm0(i));
 end
-y0 = [0; 0; 0; phi0; theta0; psi0; 0; 0; 0; T_eff; Q_eff];
+y0 = [0; -0.1; -0.1; phi0; theta0; psi0; 0; 0; 0; T_eff; Q_eff];
 end
 
 function y0 = build_y0_17_at_trim(P_J, pwm_trim, func_T, func_Q)
@@ -627,12 +632,20 @@ end
 end
 
 function sim = pack_sim(state, acc)
+% Atitude vai em GRAUS pra plot ser legível
 sim = struct('p', state.p, 'q', state.q, 'r', state.r, ...
+             'phi',   rad2deg(state.phi), ...
+             'theta', rad2deg(state.theta), ...
+             'psi',   rad2deg(state.psi), ...
              'ax', acc.x, 'ay', acc.y, 'az', acc.z);
 end
 
-function meas = pack_meas(pqr, acc)
+function meas = pack_meas(pqr, acc, att_deg)
+% att_deg: matriz Nx3 [roll, pitch, yaw] em graus (vem do EKF do log)
 meas = struct('p', pqr(:,1), 'q', pqr(:,2), 'r', pqr(:,3), ...
+              'phi',   att_deg(:,1), ...
+              'theta', att_deg(:,2), ...
+              'psi',   att_deg(:,3), ...
               'ax', acc.x, 'ay', acc.y, 'az', acc.z);
 end
 
@@ -640,16 +653,21 @@ function acc = struct2acc(s)
 acc = struct('x', s.x, 'y', s.y, 'z', s.z);
 end
 
-function plot_2x3_pqr_acc(t, sim_dict, meas, title_str, save_path)
-fig = figure('Position',[100 100 1600 720], 'Color','w');
-labels = {'p','q','r','ax','ay','az'};
-units  = {'rad/s','rad/s','rad/s','m/s^2','m/s^2','m/s^2'};
+function plot_3x3_full(t, sim_dict, meas, title_str, save_path)
+% Plot 3x3:
+%   linha 1: p, q, r          [rad/s]
+%   linha 2: phi, theta, psi  [deg]   ◄── atitude
+%   linha 3: ax, ay, az       [m/s²]
+
+fig = figure('Position',[100 100 1600 900], 'Color','w');
+labels = {'p','q','r','phi','theta','psi','ax','ay','az'};
+units  = {'rad/s','rad/s','rad/s','deg','deg','deg','m/s^2','m/s^2','m/s^2'};
 
 names = fieldnames(sim_dict);
 colors = {'b-','r--','m:'};
 
-for k = 1:6
-    subplot(2,3,k); hold on; grid on;
+for k = 1:9
+    subplot(3,3,k); hold on; grid on;
     if ~isempty(meas)
         plot(t, meas.(labels{k}), 'Color',[0 0.9 0.3], ...
             'LineWidth',1.4, 'DisplayName','medido');
