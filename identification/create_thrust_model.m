@@ -1,46 +1,38 @@
-function thrust_model_function = create_thrust_model(pwm_experimental, thrust_grams_experimental, polynomial_degree)
-    % CREATE_THRUST_MODEL Ajusta um modelo polinomial aos dados de empuxo.
-    %
-    % Inputs:
-    %   pwm_experimental: Vetor coluna de valores PWM experimentais.
-    %   thrust_grams_experimental: Vetor coluna de valores de empuxo experimentais [gramas].
-    %   polynomial_degree: Grau do polinômio a ser ajustado (ex: 2).
-    %
-    % Output:
-    %   thrust_model_function: Um handle de função que aceita PWM e retorna empuxo [N].
+function thrust_model_function = create_thrust_model(pwm_experimental, thrust_grams_experimental, varargin)
+%CREATE_THRUST_MODEL  Modelo de empuxo PWM->T via spline cubica da tabela de bancada.
+%
+% Inputs:
+%   pwm_experimental:          vetor PWM dos pontos de bancada
+%   thrust_grams_experimental: vetor de empuxo em GRAMAS
+%   (3o arg, opcional, ignorado: mantido por compat com chamadas antigas)
+%
+% Output:
+%   thrust_model_function: handle T(pwm) [N]
+%     - PWM saturado em [1000, 2000] us
+%     - Interpolacao SPLINE CUBICA passando exato pelos pontos de bancada
+%     - Saida >= 0 (max(0, .))
+%
+% NOTA: o terceiro argumento (anteriormente polynomial_degree) e mantido por
+% compatibilidade com codigo existente mas IGNORADO. O modelo nao usa mais
+% polyfit/polyval -- usa interp1 'spline'.
 
     % Converter empuxo de gramas para Newtons
     thrust_N_experimental = thrust_grams_experimental * 9.80665 / 1000;
 
-    % Ajustar o polinômio: T(pwm) = c(1)*pwm^N + ... + c(N+1)
-    coeffs_thrust = polyfit(pwm_experimental, thrust_N_experimental, polynomial_degree);
+    pwm_min = 1000;
+    pwm_max = 2000;
 
-    % Encontrar o PWM mínimo para o qual o empuxo é > 0 nos dados experimentais
-    % Isso define uma "dead zone" para o modelo.
-    idx_first_active_thrust = find(thrust_N_experimental > 1e-9, 1, 'first'); % Usar uma pequena tolerância
-    if isempty(idx_first_active_thrust)
-        min_pwm_for_active_thrust = pwm_experimental(1); % Caso padrão (improvável com seus dados)
-    else
-        min_pwm_for_active_thrust = pwm_experimental(idx_first_active_thrust);
-    end
-    
-    % Criar o handle da função do modelo de empuxo
-    % A função garante que o empuxo seja >= 0 e respeite a "dead zone"
-    thrust_model_function = @(pwm_input) (pwm_input >= min_pwm_for_active_thrust) .* max(0, polyval(coeffs_thrust, pwm_input));
-    
-    fprintf('Coeficientes do Modelo de Empuxo (grau %d) [N]:\n', polynomial_degree);
-    disp(coeffs_thrust);
-    fprintf('Empuxo será zero para PWM < %.0f com base nos dados fornecidos.\n', min_pwm_for_active_thrust);
-    
-    % Opcional: Plotar para verificar o ajuste
-    % figure;
-    % plot(pwm_experimental, thrust_N_experimental, 'o', 'DisplayName', 'Dados Experimentais (N)');
-    % hold on;
-    % pwm_range_plot = linspace(min(pwm_experimental), max(pwm_experimental), 200);
-    % plot(pwm_range_plot, thrust_model_function(pwm_range_plot), '-', 'DisplayName', sprintf('Modelo Polinomial (Grau %d)', polynomial_degree));
-    % xlabel('PWM');
-    % ylabel('Empuxo (N)');
-    % legend show;
-    % title('Ajuste do Modelo de Empuxo');
-    % grid on;
+    % Handle do modelo: spline cubica, saturando PWM e clampando T>=0
+    pwm_bp = pwm_experimental(:);
+    T_bp   = thrust_N_experimental(:);
+    thrust_model_function = @(pwm_input) ...
+        max(0, interp1(pwm_bp, T_bp, ...
+                       min(max(pwm_input, pwm_min), pwm_max), ...
+                       'makima', 'extrap'));
+
+    fprintf('Modelo de Empuxo: Akima (makima) sobre %d pontos\n', numel(pwm_bp));
+    fprintf('  PWM saturado em [%d, %d] us; empuxo >= 0\n', pwm_min, pwm_max);
+    fprintf('  Bench: PWM=[%s]  T=[%s] N\n', ...
+        strjoin(arrayfun(@(x) sprintf('%g',x), pwm_bp, 'UniformOutput', false), ' '), ...
+        strjoin(arrayfun(@(x) sprintf('%.3f',x), T_bp, 'UniformOutput', false), ' '));
 end

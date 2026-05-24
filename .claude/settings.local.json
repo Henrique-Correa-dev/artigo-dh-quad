@@ -3,7 +3,10 @@
     "allow": [
       "Bash(matlab -batch \"cd\\(''C:/Users/Henrique/ARTIGO/identification''\\); new_identification\")",
       "Bash(find C:\\\\Users\\\\Henrique\\\\ARTIGO -name \"*.m\" -exec grep -l \"cost_function_vtol\" {} ;)",
-      "Bash(pdflatex -interaction=nonstopmode main.tex)"
+      "Bash(pdflatex -interaction=nonstopmode main.tex)",
+      "Bash(brew install poppler)",
+      "Bash(brew list poppler)",
+      "Bash(pdfinfo /Users/graest/ita-master/artigo/artigo-dh-quad/uavbook.pdf)"
     ]
   }
 }

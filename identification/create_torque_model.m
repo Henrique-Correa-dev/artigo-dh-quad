@@ -1,43 +1,30 @@
-function torque_model_function = create_torque_model(pwm_experimental, torque_Nm_experimental, polynomial_degree)
-    % CREATE_TORQUE_MODEL Ajusta um modelo polinomial aos dados de contra-torque.
-    %
-    % Inputs:
-    %   pwm_experimental: Vetor coluna de valores PWM experimentais.
-    %   torque_Nm_experimental: Vetor coluna de valores de contra-torque experimentais [Nm].
-    %   polynomial_degree: Grau do polinômio a ser ajustado (ex: 2).
-    %
-    % Output:
-    %   torque_model_function: Um handle de função que aceita PWM e retorna contra-torque [Nm].
+function torque_model_function = create_torque_model(pwm_experimental, torque_Nm_experimental, varargin)
+%CREATE_TORQUE_MODEL  Modelo de contra-torque PWM->Q via spline cubica da bancada.
+%
+% Inputs:
+%   pwm_experimental:        vetor PWM dos pontos de bancada
+%   torque_Nm_experimental:  vetor de torque em N.m
+%   (3o arg, opcional, ignorado: mantido por compat com chamadas antigas)
+%
+% Output:
+%   torque_model_function: handle Q(pwm) [N.m]
+%     - PWM saturado em [1000, 2000] us
+%     - Interpolacao SPLINE CUBICA passando exato pelos pontos de bancada
+%     - Saida >= 0 (max(0, .))
 
-    % Ajustar o polinômio: Q(pwm) = c(1)*pwm^N + ... + c(N+1)
-    coeffs_torque = polyfit(pwm_experimental, torque_Nm_experimental, polynomial_degree);
-    fprintf("%.15f \n",coeffs_torque)
+    pwm_min = 1000;
+    pwm_max = 2000;
 
-    % Encontrar o PWM mínimo para o qual o torque é > 0 nos dados experimentais
-    idx_first_active_torque = find(torque_Nm_experimental > 1e-9, 1, 'first'); % Usar uma pequena tolerância
-    if isempty(idx_first_active_torque)
-        min_pwm_for_active_torque = pwm_experimental(1); % Caso padrão
-    else
-        min_pwm_for_active_torque = pwm_experimental(idx_first_active_torque);
-    end
+    pwm_bp = pwm_experimental(:);
+    Q_bp   = torque_Nm_experimental(:);
+    torque_model_function = @(pwm_input) ...
+        max(0, interp1(pwm_bp, Q_bp, ...
+                       min(max(pwm_input, pwm_min), pwm_max), ...
+                       'makima', 'extrap'));
 
-    % Criar o handle da função do modelo de torque
-    % A função garante que o torque seja >= 0 e respeite a "dead zone"
-    torque_model_function = @(pwm_input) (pwm_input >= min_pwm_for_active_torque) .* max(0, polyval(coeffs_torque, pwm_input));
-
-    fprintf('Coeficientes do Modelo de Torque (grau %d) [Nm]:\n', polynomial_degree);
-    disp(coeffs_torque);
-    fprintf('Torque será zero para PWM < %.0f com base nos dados fornecidos.\n', min_pwm_for_active_torque);
-
-    % Opcional: Plotar para verificar o ajuste
-    % figure;
-    % plot(pwm_experimental, torque_Nm_experimental, 'o', 'DisplayName', 'Dados Experimentais (Nm)');
-    % hold on;
-    % pwm_range_plot = linspace(min(pwm_experimental), max(pwm_experimental), 200);
-    % plot(pwm_range_plot, torque_model_function(pwm_range_plot), '-', 'DisplayName', sprintf('Modelo Polinomial (Grau %d)', polynomial_degree));
-    % xlabel('PWM');
-    % ylabel('Contra-Torque (Nm)');
-    % legend show;
-    % title('Ajuste do Modelo de Torque');
-    % grid on;
+    fprintf('Modelo de Torque: Akima (makima) sobre %d pontos\n', numel(pwm_bp));
+    fprintf('  PWM saturado em [%d, %d] us; torque >= 0\n', pwm_min, pwm_max);
+    fprintf('  Bench: PWM=[%s]  Q=[%s] Nm\n', ...
+        strjoin(arrayfun(@(x) sprintf('%g',x), pwm_bp, 'UniformOutput', false), ' '), ...
+        strjoin(arrayfun(@(x) sprintf('%.4f',x), Q_bp, 'UniformOutput', false), ' '));
 end

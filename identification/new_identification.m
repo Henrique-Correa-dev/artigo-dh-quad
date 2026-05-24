@@ -153,12 +153,12 @@ param_names = {'Jx','Jy','Jz','Jxz', ...
     'Xu_m','Yv_m','Zw_m','Bz'};
 
 R2_func = @(y_e, y_s) 1 - sum((y_e - y_s).^2) / max(sum((y_e - mean(y_e)).^2), 1e-12);
-constants_sim.m = 1.6011;
+constants_sim.m = 2.20;   % Massa total medida (era 1.6011, valor do CAD com massa errada)
 constants_sim.g = 9.81;
 ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);  % Mesmo que Simulink
 
-% Criar pasta de imagens se não existir
-img_dir = fullfile('C:/Users/Henrique/ARTIGO/identification/images');
+% Criar pasta de imagens se não existir (path portavel: subpasta do script)
+img_dir = fullfile(fileparts(mfilename('fullpath')), 'images');
 if ~exist(img_dir, 'dir'), mkdir(img_dir); end
 
 %% ========================================================================
@@ -881,7 +881,7 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
     legend('Exp','Sim'); xlabel('Tempo (s)'); ylabel('r (rad/s)');
     title(sprintf('%s — r (R^2=%.3f)', lbl_vl, R2_func(pqr_vl(:,3), res.r_s_vl))); grid on;
     sgtitle(['Vel. Angulares (Val) — ' titulo]);
-    saveas(fig1, fullfile('C:/Users/Henrique/ARTIGO/identification/images', ['pqr_val_' safe_titulo '.png']));
+    saveas(fig1, fullfile(fileparts(mfilename('fullpath')), 'images', ['pqr_val_' safe_titulo '.png']));
 
     fig2 = figure('Name', ['Acc - ' titulo], 'Position', [120 90 900 700], 'Visible', 'off');
     subplot(3,1,1);
@@ -897,7 +897,7 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
     legend('IMU','Sim'); xlabel('Tempo (s)'); ylabel('AccZ (m/s²)');
     title(sprintf('%s — AccZ (R^2=%.3f)', lbl_vl, R2_func(acc_vl(:,3), res.accZ_s_vl))); grid on;
     sgtitle(['Acelerações (Val) — ' titulo]);
-    saveas(fig2, fullfile('C:/Users/Henrique/ARTIGO/identification/images', ['acc_val_' safe_titulo '.png']));
+    saveas(fig2, fullfile(fileparts(mfilename('fullpath')), 'images', ['acc_val_' safe_titulo '.png']));
 
     % --- Gráfico de Atitude (phi, theta, psi) ---
     if nargin >= 12 && ~isempty(att_vl) && isfield(res, 'phi_s_vl') && res.pqr_vl_ok
@@ -915,7 +915,7 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
         legend('EKF','Sim'); xlabel('Tempo (s)'); ylabel('\psi (°)');
         title(sprintf('%s — \\psi (R^2=%.3f)', lbl_vl, R2_func(att_vl(:,3), res.psi_s_vl))); grid on;
         sgtitle(['Atitude (Val) — ' titulo]);
-        saveas(fig3, fullfile('C:/Users/Henrique/ARTIGO/identification/images', ['att_val_' safe_titulo '.png']));
+        saveas(fig3, fullfile(fileparts(mfilename('fullpath')), 'images', ['att_val_' safe_titulo '.png']));
     end
 end
 
@@ -971,7 +971,7 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     title(sprintf('Yaw: Mz  (k_Q=[%.3f, %.3f, %.3f, %.3f])', k_Q(1), k_Q(2), k_Q(3), k_Q(4)));
 
     sgtitle(sprintf('Torques na Validação [%d-%ds]  (dx_{cg}=%.4f, dy_{cg}=%.4f)', t_val(1), t_val(2), dx_cg, dy_cg));
-    saveas(fig3, fullfile('C:/Users/Henrique/ARTIGO/identification/images', 'torques_validacao.png'));
+    saveas(fig3, fullfile(fileparts(mfilename('fullpath')), 'images', 'torques_validacao.png'));
 
     fprintf('\n  --- Torques (validação) | dx_cg=%.4f dy_cg=%.4f ---\n', dx_cg, dy_cg);
     fprintf('    Braços: Lx_r=%.4f Lx_l=%.4f Ly_f=%.4f Ly_r=%.4f\n', Lx_r, Lx_l, Ly_f, Ly_r);
@@ -1075,7 +1075,7 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     title(sprintf('Eixo Z: força específica medida vs modelo  (Bz=%.3f, Zw=%.3f)', Bz, Zw_m));
 
     sgtitle(sprintf('Forças Translacionais — Validação [%d-%ds]  (m=%.1f kg)', t_val(1), t_val(2), m));
-    saveas(fig4, fullfile('C:/Users/Henrique/ARTIGO/identification/images', 'forcas_validacao.png'));
+    saveas(fig4, fullfile(fileparts(mfilename('fullpath')), 'images', 'forcas_validacao.png'));
 
     % =====================================================================
     %  Figura 2: Análise dos PWMs por motor
@@ -1128,7 +1128,7 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
         mean(T_ref_total), m*g, mean(T_ref_total)/(m*g)));
 
     sgtitle(sprintf('Análise PWM e Empuxo — Validação [%d-%ds]', t_val(1), t_val(2)));
-    saveas(fig5, fullfile('C:/Users/Henrique/ARTIGO/identification/images', 'pwm_analise.png'));
+    saveas(fig5, fullfile(fileparts(mfilename('fullpath')), 'images', 'pwm_analise.png'));
 
     % Estatísticas
     fprintf('\n  --- Forças (validação) ---\n');
