@@ -13,7 +13,13 @@
 %   >> simulate           % carrega e compara NL vs linear
 
 %% ========================================================================
-%  1. CONFIGURACAO (identica ao simulate.m)
+%  0. SETUP DE PATHS
+%  ========================================================================
+addpath(fileparts(fileparts(mfilename('fullpath'))));
+paths = setup_paths();
+
+%% ========================================================================
+%  1. CONFIGURACAO (parameters.m centraliza P0 e bench data)
 %  ========================================================================
 
 % ---------- Selecao de parametros ----------
@@ -26,7 +32,7 @@ P = [0.063244; 0.250554; 0.116192; 0.001571;   ... % Jx, Jy, Jz, Jxz
      -4.0; -4.0; -0.1; -0.5];                     % Xu_m, Yv_m, Zw_m, Bz
 
 % Descomente para usar parametros identificados:
-%id = load(fullfile(fileparts(mfilename('fullpath')), 'P_identified.mat'));
+%id = load(fullfile(paths.outputs, 'P_identified.mat'));
 %P = id.P_final;
 
 constants.m = 1.6011;
@@ -35,13 +41,7 @@ constants.g = 9.81;
 %% ========================================================================
 %  2. MODELOS DE REFERENCIA DOS MOTORES
 %  ========================================================================
-pwm_values_exp   = [1000; 1200; 1400; 1600; 1800; 2000];
-thrust_grams_exp = [0; 143; 328; 532; 784; 843];
-torque_Nm_exp    = [0.000; 0.034; 0.070; 0.115; 0.171; 0.176];
-poly_degree = 3;
-
-func_T_ref = create_thrust_model(pwm_values_exp, thrust_grams_exp, poly_degree);
-func_Q_ref = create_torque_model(pwm_values_exp, torque_Nm_exp, poly_degree);
+[func_T_ref, func_Q_ref] = motor_models();  % centralizado em 2_model/
 
 %% ========================================================================
 %  3. PONTO DE TRIM (HOVER)
@@ -160,7 +160,7 @@ end
 %% ========================================================================
 %  6. SALVAR MODELO LINEAR
 %  ========================================================================
-save_path = fullfile(fileparts(mfilename('fullpath')), 'linear_model.mat');
+save_path = fullfile(paths.outputs, 'linear_model.mat');
 save(save_path, 'A', 'B', 'x0', 'u0', 'f0', 'eig_A', 'P', 'PWM_hover');
 fprintf('\n  Modelo linear salvo em: %s\n', save_path);
 fprintf('==========================================================\n');

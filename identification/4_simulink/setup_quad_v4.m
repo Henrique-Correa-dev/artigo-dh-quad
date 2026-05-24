@@ -41,20 +41,15 @@ tau_motor = 0.05;   % segundos
 %% ===================================================================
 %  1) Carregar log e definir P_J (J-formulation)
 %  ===================================================================
-this_dir = fileparts(mfilename('fullpath'));
-load(fullfile(this_dir, 'log_data.mat'));
+addpath(fileparts(fileparts(mfilename('fullpath'))));   % raiz pra setup_paths
+paths = setup_paths();
+load(fullfile(paths.data, 'log_data.mat'));
 
-% P0 do new_identification.m (chute inicial / baseline)
-Jx0=63.244/1000; Jy0=250.554/1000; Jz0=116.192/1000; Jxz0=1.571/1000;
-P0_J = [Jx0; Jy0; Jz0; Jxz0;
-        0.55; 0.45; 1.0; 0.75;       % k_T
-        0.55; 0.45; 1.0; 0.75;       % k_Q
-        10; 5; 0.5;                   % Dp, Dq, Dr
-        0.7; 1.4; 0.3;                % Bp, Bq, Br
-        0; 0;                          % dx_cg, dy_cg
-        -4; -4; -0.1; -0.5];          % Xu, Yv, Zw, Bz
+% P0 vem de parameters.m (centralizado em 2_model/)
+proj_params = parameters();
+P0_J = proj_params.P0_J;
 
-P_file = fullfile(this_dir, 'P_identified.mat');
+P_file = fullfile(paths.outputs, 'P_identified.mat');
 if use_P0
     P_J = P0_J;
     fprintf('setup_quad_v4: usando P0 (chute inicial)\n');

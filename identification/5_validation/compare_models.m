@@ -29,7 +29,9 @@ function compare_models(mode, varargin)
 %     atualizar para 2.20 quando task #72 propagar para v4.slx também).
 
 if nargin < 1, mode = 'log'; end
-cd(fileparts(mfilename('fullpath')));
+% Adicionar raiz do projeto ao path (sobe um nível de 5_validation/)
+addpath(fileparts(fileparts(mfilename('fullpath'))));
+setup_paths();  % adiciona todas subpastas ativas ao path
 
 switch lower(mode)
     case 'log',       compare_vs_log();
@@ -106,7 +108,7 @@ title_str = sprintf('Comparacao v4 vs script vs medido | janela %g-%g s', ...
     ref.time_abs(1), ref.time_abs(end));
 
 plot_2x3_pqr_acc(ref.time, sim_dict, meas_dict, title_str, ...
-    fullfile('images_v4', 'compare_v4_vs_script.png'));
+    fullfile(setup_paths().images, 'compare_v4_vs_script.png'));
 end
 
 
@@ -226,7 +228,7 @@ print_scenarios_summary(results);
 
 % Plot do pior cenário
 plot_worst_scenario(results, ...
-    fullfile('images_v4','validate_scenarios_worst.png'));
+    fullfile(setup_paths().images,'validate_scenarios_worst.png'));
 end
 
 
@@ -239,12 +241,13 @@ fprintf('\n========== MODO: linear (linear vs NL.m vs NL.slx) ==========\n');
 
 bdclose all; clear; clc;
 
-% Carrega modelo linear pré-computado (linearize.m gera linear_model.mat)
-if ~exist('linear_model.mat','file')
-    error(['linear_model.mat nao encontrado. Rode linearize.m primeiro ', ...
-        'para gerar A, B, x0, u0, f0.']);
+% Carrega modelo linear pré-computado (linearize.m gera em outputs/)
+lm_path = fullfile(setup_paths().outputs, 'linear_model.mat');
+if ~exist(lm_path, 'file')
+    error(['%s nao encontrado. Rode linearize.m primeiro ', ...
+        'para gerar A, B, x0, u0, f0.'], lm_path);
 end
-lm = load('linear_model.mat');
+lm = load(lm_path);
 
 % Pegar P_J consistente com o ponto de linearização
 P_J = default_P0();
@@ -292,7 +295,7 @@ for s = 1:numel(perturb_scenarios)
     results(s).y_slx = y_slx;
 end
 
-plot_linear_comparison(results, fullfile('images_v4','validate_lin_vs_nl.png'));
+plot_linear_comparison(results, fullfile(setup_paths().images,'validate_lin_vs_nl.png'));
 end
 
 
@@ -310,9 +313,8 @@ Q_b = [0; 0.034; 0.070; 0.115; 0.171; 0.176];  % Nm
 end
 
 function [func_T, func_Q] = build_motor_models()
-[pwm_b, T_b, Q_b] = bench_table();
-func_T = create_thrust_model(pwm_b, T_b * 1000/9.80665, 3);  % create_* espera gramas
-func_Q = create_torque_model(pwm_b, Q_b, 3);
+% Delega para motor_models.m (2_model/) — usa tabela centralizada
+[func_T, func_Q] = motor_models();
 end
 
 function c = build_constants(tau_motor)
@@ -322,14 +324,9 @@ c = struct('m', 1.6011, 'g', 9.81, 'tau_motor', tau_motor);
 end
 
 function P_J = default_P0()
-Jx0 = 63.244/1000; Jy0 = 250.554/1000; Jz0 = 116.192/1000; Jxz0 = 1.571/1000;
-P_J = [Jx0; Jy0; Jz0; Jxz0; ...
-       0.55; 0.45; 1.0; 0.75;        % k_T
-       0.55; 0.45; 1.0; 0.75;        % k_Q
-       10; 5; 0.5;                   % Dp, Dq, Dr
-       0.7; 1.4; 0.3;                % Bp, Bq, Br
-       0; 0;                         % dx_cg, dy_cg
-       -4; -4; -0.1; -0.5];          % Xu, Yv, Zw, Bz
+% Delega para parameters.m (2_model/) — fonte única de verdade
+p = parameters();
+P_J = p.P0_J;
 end
 
 function y0 = build_y0_17(P_J, pwm0, phi0, theta0, psi0, func_T, func_Q)
