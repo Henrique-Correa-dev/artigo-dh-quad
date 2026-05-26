@@ -25,8 +25,8 @@ function compare_models(mode, varargin)
 %   - Os 3 modos usam função vtol_dynamics.m (modo 17 estados com lag).
 %   - O .slx alvo é sempre quad_model_v4.
 %   - Modelos de motor: spline Akima da bancada (mesma usada no .slx).
-%   - Massas usam os mesmos valores dos scripts originais (ainda 1.6011 kg;
-%     atualizar para 2.20 quando task #72 propagar para v4.slx também).
+%   - Massa e gravidade vêm de parameters.m (FONTE ÚNICA).
+%     v4.slx tem blocos Massa e Gravidade lendo 'mass' e 'g_acc' do workspace.
 
 if nargin < 1, mode = 'log'; end
 % Adicionar raiz do projeto ao path (sobe um nível de 5_validation/)
@@ -55,6 +55,15 @@ end
 function compare_vs_log()
 fprintf('\n========== MODO: log (v4.slx vs vtol_dynamics.m vs medido) ==========\n');
 
+% ╔══════════════════════════════════════════════════════════════════╗
+% ║  FLAGS — quais modelos mostrar no plot                          ║
+% ║  Edite aqui para ligar/desligar cada série                      ║
+% ╚══════════════════════════════════════════════════════════════════╝
+show.medido = true;    % verde: dados do log experimental (IMU + EKF)
+show.v4     = true;    % azul: quad_model_v4.slx (Simulink)
+show.script = true;    % vermelho: vtol_dynamics.m (script, 17 estados)
+show.linear = true;    % magenta: modelo linear (precisa outputs/linear_model.mat)
+
 bdclose all;
 evalin('base', 'clearvars');
 evalin('base', 'run setup_quad_v4');
@@ -68,47 +77,92 @@ theta0  = gv('theta0');
 psi0    = gv('psi0');
 tau_m   = gv('tau_motor');
 
-% --- 1) Rodar v4.slx capturando estados via outports temporários ---
-[state_v4, sub_specs] = run_v4_with_extra_outports(t_sim, ref.time, true);
-
-% --- 2) Rodar vtol_dynamics.m (17 estados, mesmo tau do .slx) ---
 [func_T, func_Q] = build_motor_models();
 constants_sim = build_constants(tau_m);
 
-y0 = build_y0_17(P_J, ref.pwm(1,:), phi0, theta0, psi0, func_T, func_Q);
+sim_dict = struct();
 
-ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);
-[t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P_J, ref.time, ref.pwm, ...
-    func_T, func_Q, constants_sim), ref.time, y0, ode_opts);
-y_script = interp1(t_s, y_s, ref.time, 'linear', 'extrap');
+% --- v4.slx ---
+if show.v4
+    [state_v4, ~] = run_v4_with_extra_outports(t_sim, ref.time, true);
+    acc_v4 = build_acc_from_state(state_v4, constants_sim.g);
+    sim_dict.v4 = pack_sim(state_v4, acc_v4);
+end
 
-state_script = unpack_states_17(y_script);
-% Adicionar derivadas u_dot,v_dot,w_dot via vtol_dynamics
-[udot, vdot, wdot] = compute_dots(P_J, ref.time, ref.pwm, y_script, ...
-    func_T, func_Q, constants_sim);
-state_script.udot = udot;
-state_script.vdot = vdot;
-state_script.wdot = wdot;
+% --- vtol_dynamics.m (script, 17 estados) ---
+if show.script
+    y0 = build_y0_17(P_J, ref.pwm(1,:), phi0, theta0, psi0, func_T, func_Q);
+    ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);
+    [t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P_J, ref.time, ref.pwm, ...
+        func_T, func_Q, constants_sim), ref.time, y0, ode_opts);
+    y_script = interp1(t_s, y_s, ref.time, 'linear', 'extrap');
+    state_script = unpack_states_17(y_script);
+    [udot, vdot, wdot] = compute_dots(P_J, ref.time, ref.pwm, y_script, ...
+        func_T, func_Q, constants_sim);
+    state_script.udot = udot; state_script.vdot = vdot; state_script.wdot = wdot;
+    acc_script = build_acc_from_state(state_script, constants_sim.g);
+    sim_dict.script = pack_sim(state_script, acc_script);
+end
 
-% --- 3) Converter w_dot em aceleração específica AccZ (mesma convenção IMU) ---
-acc_v4     = build_acc_from_state(state_v4,     constants_sim.g);
-acc_script = build_acc_from_state(state_script, constants_sim.g);
-acc_meas   = struct('x', ref.acc(:,1), 'y', ref.acc(:,2), 'z', ref.acc(:,3));
+% --- Modelo linear ---
+if show.linear
+    lm_path = fullfile(setup_paths().outputs, 'linear_model.mat');
+    if exist(lm_path, 'file')
+        lm = load(lm_path);
+        state_lin = simulate_linear_for_log(lm, ref.time, ref.pwm);
+        sim_dict.linear = pack_sim(state_lin, struct('x', state_lin.udot, ...
+            'y', state_lin.vdot, 'z', state_lin.wdot));
+    else
+        fprintf('AVISO: %s nao existe — rode linearize.m primeiro. Pulando linear.\n', lm_path);
+    end
+end
 
-% --- 4) Tabela de erros (v4 vs script) ---
-print_error_table(state_v4, state_script, acc_v4, acc_script);
+% --- Tabela de erros (v4 vs script, se ambos rodaram) ---
+if show.v4 && show.script
+    print_error_table(state_v4, state_script, acc_v4, acc_script);
+end
 
-% --- 5) Plot 3x3: pqr + atitude + aceleracoes ---
-sim_dict = struct( ...
-    'v4',     pack_sim(state_v4, acc_v4), ...
-    'script', pack_sim(state_script, acc_script));
-meas_dict = pack_meas(ref.pqr, struct2acc(acc_meas), ref.att_deg);
+% --- Medido (do log) ---
+acc_meas = struct('x', ref.acc(:,1), 'y', ref.acc(:,2), 'z', ref.acc(:,3));
+if show.medido
+    meas_dict = pack_meas(ref.pqr, struct2acc(acc_meas), ref.att_deg);
+else
+    meas_dict = [];
+end
 
-title_str = sprintf('Comparacao v4 vs script vs medido | janela %g-%g s', ...
+% --- Plot 3x3 ---
+title_str = sprintf('Comparacao v4 vs script vs linear vs medido | janela %g-%g s', ...
     ref.time_abs(1), ref.time_abs(end));
-
 plot_3x3_full(ref.time, sim_dict, meas_dict, title_str, ...
     fullfile(setup_paths().images, 'compare_v4_vs_script.png'));
+end
+
+
+function state = simulate_linear_for_log(lm, t_vec, pwm)
+% Simula o modelo linear (estado-espaço) sobre os PWMs do log.
+% IMPORTANTE: o linear só é fiel próximo ao trim. Quando o log se afasta,
+% o linear diverge — isso é esperado e VISÍVEL no plot.
+N = numel(t_vec); dt = t_vec(2) - t_vec(1);
+nx = size(lm.A, 1);
+
+du = pwm - lm.u0(:)';   % perturbação em PWM (4 cols)
+dx = zeros(N, nx);
+dx_dot = zeros(N, nx);  % derivadas REAIS do modelo linear (A*dx + B*du)
+for k = 1:N-1
+    dx_dot(k,:) = (lm.A * dx(k,:)' + lm.B * du(k,:)')';
+    dx(k+1,:)   = dx(k,:) + dt * dx_dot(k,:);
+end
+dx_dot(N,:) = (lm.A * dx(N,:)' + lm.B * du(N,:)')';
+y = dx + lm.x0(:)';
+
+state = struct('p', y(:,1), 'q', y(:,2), 'r', y(:,3), ...
+               'phi', y(:,4), 'theta', y(:,5), 'psi', y(:,6), ...
+               'u', y(:,7), 'v', y(:,8), 'w', y(:,9));
+
+% udot/vdot/wdot vêm DIRETO de dx_dot (derivadas que o linear prediz)
+state.udot = dx_dot(:,7);
+state.vdot = dx_dot(:,8);
+state.wdot = dx_dot(:,9);
 end
 
 
@@ -519,9 +573,8 @@ end
 end
 
 function r = trim_residuals(pwm, P_J, func_T, func_Q, T_needed)
-% Resíduos: [Mx, My, Mz, T_total - mg] em hover. dx_cg, dy_cg de P_J
+% Resíduos: [Mx, My, Mz, T_total - mg] em hover. CG fixo do CAD.
 k_T = P_J(5:8); k_Q = P_J(9:12);
-dx_cg = P_J(19); dy_cg = P_J(20);
 
 T = zeros(4,1); Q = zeros(4,1);
 for i = 1:4
@@ -529,8 +582,8 @@ for i = 1:4
     Q(i) = k_Q(i) * func_Q(pwm(i));
 end
 
-Lx_r = 0.232 - dy_cg;  Lx_l = 0.232 + dy_cg;
-Ly_f = 0.311185 - dx_cg;  Ly_r = 0.342865 + dx_cg;
+Lx_r = 0.232;  Lx_l = 0.232;
+Ly_f = 0.311185;  Ly_r = 0.342865;
 
 Mx = -(Lx_r*T(1) - Lx_l*T(2) - Lx_l*T(3) + Lx_r*T(4));
 My =  (Ly_f*T(1) - Ly_r*T(2) + Ly_f*T(3) - Ly_r*T(4));
@@ -656,26 +709,49 @@ end
 function plot_3x3_full(t, sim_dict, meas, title_str, save_path)
 % Plot 3x3:
 %   linha 1: p, q, r          [rad/s]
-%   linha 2: phi, theta, psi  [deg]   ◄── atitude
-%   linha 3: ax, ay, az       [m/s²]
+%   linha 2: ax, ay, az       [m/s²]
+%   linha 3: phi, theta, psi  [deg]   ◄── atitude por último
 
 fig = figure('Position',[100 100 1600 900], 'Color','w');
-labels = {'p','q','r','phi','theta','psi','ax','ay','az'};
-units  = {'rad/s','rad/s','rad/s','deg','deg','deg','m/s^2','m/s^2','m/s^2'};
+labels = {'p','q','r','ax','ay','az','phi','theta','psi'};
+units  = {'rad/s','rad/s','rad/s','m/s^2','m/s^2','m/s^2','deg','deg','deg'};
 
 names = fieldnames(sim_dict);
-colors = {'b-','r--','m:'};
+% Cores por série (ordem dos nomes em sim_dict define cor)
+color_map = containers.Map( ...
+    {'v4',   'script', 'linear'}, ...
+    {'b-',   'r--',    'm-.'});
 
 for k = 1:9
     subplot(3,3,k); hold on; grid on;
+
+    % Coletar todos valores NÃO-LINEAR para definir escala (linear pode estourar)
+    all_vals = [];
+    if ~isempty(meas), all_vals = [all_vals; meas.(labels{k})(:)]; end
+    for j = 1:numel(names)
+        if ~strcmp(names{j}, 'linear')
+            all_vals = [all_vals; sim_dict.(names{j}).(labels{k})(:)];
+        end
+    end
+
     if ~isempty(meas)
         plot(t, meas.(labels{k}), 'Color',[0 0.9 0.3], ...
             'LineWidth',1.4, 'DisplayName','medido');
     end
     for j = 1:numel(names)
-        plot(t, sim_dict.(names{j}).(labels{k}), colors{j}, ...
-            'LineWidth',1.5, 'DisplayName', names{j});
+        nm = names{j};
+        if color_map.isKey(nm), c = color_map(nm); else, c = 'k-'; end
+        plot(t, sim_dict.(nm).(labels{k}), c, ...
+            'LineWidth',1.5, 'DisplayName', nm);
     end
+
+    % Fixar ylim com margem 15% baseado nos modelos não-lineares (linear pode sair)
+    if ~isempty(all_vals)
+        lo = min(all_vals); hi = max(all_vals);
+        margin = 0.15 * max(hi - lo, 1e-6);
+        ylim([lo - margin, hi + margin]);
+    end
+
     title(labels{k}, 'FontWeight','bold');
     xlabel('t [s]'); ylabel(units{k});
     if k == 1, legend('Location','best'); end

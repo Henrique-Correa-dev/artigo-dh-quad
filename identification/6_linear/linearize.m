@@ -35,8 +35,9 @@ P = [0.063244; 0.250554; 0.116192; 0.001571;   ... % Jx, Jy, Jz, Jxz
 %id = load(fullfile(paths.outputs, 'P_identified.mat'));
 %P = id.P_final;
 
-constants.m = 1.6011;
-constants.g = 9.81;
+proj_params = parameters();   % fonte única: 2_model/parameters.m
+constants.m = proj_params.m;
+constants.g = proj_params.g;
 
 %% ========================================================================
 %  2. MODELOS DE REFERENCIA DOS MOTORES

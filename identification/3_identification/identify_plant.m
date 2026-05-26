@@ -15,45 +15,67 @@
 % P(9:12)  = k_Q1..k_Q4
 % P(13:15) = Dp, Dq, Dr
 % P(16:18) = Bp, Bq, Br
-% P(19:20) = CG offsets [dx_cg, dy_cg]
-% P(21:24) = translacionais [Xu_m, Yv_m, Zw_m, Bz]
+% P(19:22) = translacionais [Xu_m, Yv_m, Zw_m, Bz]
+% (dx_cg, dy_cg REMOVIDOS — CG oficial = ponto de referência do CAD)
 
 %% 0. Setup de paths (adiciona subpastas ao MATLAB path)
 addpath(fileparts(fileparts(mfilename('fullpath'))));   % raiz do projeto
 paths = setup_paths();
 
-%% 1. Configuração de janelas
-% EDITE AQUI: adicione quantas janelas de treino quiser.
-% Cada linha é [t_inicio, t_fim] em segundos.
-% A validação deve ser uma janela que NÃO aparece no treino.
-t_trains = {[157, 167]; ...
-            [167, 177]; ...
-            [177, 187]}
+%% 1. Configuração de janelas e log
+% EDITE AQUI: escolha o log e as janelas de treino/validação.
+%
+% LOG_FILE:  nome do arquivo dentro de 1_data/
+%   - 'log_data.mat'                              → log antigo (struct ATT/IMU/RCOU)
+%   - '4 25-05-2026 09-31-48.log-132954.mat'      → log novo (mp_export, motores novos)
+%   - '5 25-05-2026 10-27-52.bin-155264.mat'      → log novo
+%   - '6 31-12-1979 21-00-00.bin-116760.mat'      → log novo
+%   - '7 31-12-1979 21-00-00.bin-113223.mat'      → log novo
 
-t_val = [147, 157];
+LOG_FILE = '4 25-05-2026 09-31-48.log-132954.mat';   % ◄── escolher aqui
 
-%% 2. Data loading and preprocessing
-load(fullfile(paths.data, 'log_data.mat'))
+% Janelas (ATENÇÃO: t em segundos, alinhado com TimeUS do log escolhido)
+% Pro log "4 25-05-2026 09-31-48" (motores novos, voo entre 429-557 s):
+t_trains = {[473, 483]; ...
+            [484, 494]; ...
+            [495, 505]};
+t_val    = [537, 550];
 
-ATT.TimeS  = double(ATT.TimeUS) / 1e6;
-IMU.TimeS  = double(IMU.TimeUS) / 1e6;
-RCOU.TimeS = double(RCOU.TimeUS) / 1e6;
-GPS.TimeS  = double(GPS.TimeUS) / 1e6;
+% Janelas pro log antigo (mantidas como referência — comente acima e descomente aqui):
+% t_trains = {[157, 167]; [167, 177]; [177, 187]};
+% t_val    = [147, 157];
 
-idx = IMU.I == 0;
-gyrX_raw = IMU.GyrX(idx); gyrY_raw = IMU.GyrY(idx); gyrZ_raw = IMU.GyrZ(idx);
-accX_raw = IMU.AccX(idx); accY_raw = IMU.AccY(idx); accZ_raw = IMU.AccZ(idx);
-time_IMU = IMU.TimeS(idx);
+%% 2. Data loading and preprocessing (formato unificado via load_log_data.m)
+% =========================================================================
+% BLOCO ANTIGO (formato legacy struct, comentado — load_log_data trata os 2)
+% -------------------------------------------------------------------------
+% load(fullfile(paths.data, 'log_data.mat'))
+% ATT.TimeS  = double(ATT.TimeUS) / 1e6;
+% IMU.TimeS  = double(IMU.TimeUS) / 1e6;
+% RCOU.TimeS = double(RCOU.TimeUS) / 1e6;
+% GPS.TimeS  = double(GPS.TimeUS) / 1e6;
+% idx = IMU.I == 0;
+% gyrX_raw = IMU.GyrX(idx); ... etc
+% =========================================================================
 
-time_ATT  = ATT.TimeS;
-time_GPS  = GPS.TimeS;
-time_RCOU = RCOU.TimeS;
+L = load_log_data(fullfile(paths.data, LOG_FILE));
 
-pwm1_raw = double(RCOU.C1); pwm2_raw = double(RCOU.C2);
-pwm3_raw = double(RCOU.C3); pwm4_raw = double(RCOU.C4);
+% Extrai variáveis do struct uniforme L (compatibilidade com código abaixo)
+time_IMU = L.time_IMU;   time_ATT = L.time_ATT;   time_RCOU = L.time_RCOU;
+gyrX_raw = L.gyrX_raw;   gyrY_raw = L.gyrY_raw;   gyrZ_raw = L.gyrZ_raw;
+accX_raw = L.accX_raw;   accY_raw = L.accY_raw;   accZ_raw = L.accZ_raw;
+pwm1_raw = L.pwm1_raw;   pwm2_raw = L.pwm2_raw;
+pwm3_raw = L.pwm3_raw;   pwm4_raw = L.pwm4_raw;
 
-t_start  = max([min(time_IMU), min(time_ATT), min(time_GPS), min(time_RCOU)]);
-t_end    = min([max(time_IMU), max(time_ATT), max(time_GPS), max(time_RCOU)]);
+% Grade comum de tempo (dt=0.1 s, igual antes)
+all_starts = [min(time_IMU), min(time_ATT), min(time_RCOU)];
+all_ends   = [max(time_IMU), max(time_ATT), max(time_RCOU)];
+if ~isempty(L.time_GPS)
+    all_starts(end+1) = min(L.time_GPS);
+    all_ends(end+1)   = max(L.time_GPS);
+end
+t_start  = max(all_starts);
+t_end    = min(all_ends);
 t_common = t_start:0.1:t_end;
 dt = 0.1;
 
@@ -63,13 +85,28 @@ gyrZ_interp = interp1(time_IMU, gyrZ_raw, t_common, 'linear');
 accX_interp = interp1(time_IMU, accX_raw, t_common, 'linear');
 accY_interp = interp1(time_IMU, accY_raw, t_common, 'linear');
 accZ_interp = interp1(time_IMU, accZ_raw, t_common, 'linear');
-roll_interp  = interp1(time_ATT, ATT.Roll, t_common, 'linear');
-pitch_interp = interp1(time_ATT, ATT.Pitch, t_common, 'linear');
-yaw_interp   = interp1(time_ATT, ATT.Yaw, t_common, 'linear');
+roll_interp  = interp1(time_ATT, L.roll_deg,  t_common, 'linear');
+pitch_interp = interp1(time_ATT, L.pitch_deg, t_common, 'linear');
+yaw_interp   = interp1(time_ATT, L.yaw_deg,   t_common, 'linear');
 pwm1_interp = interp1(time_RCOU, pwm1_raw, t_common, 'linear');
 pwm2_interp = interp1(time_RCOU, pwm2_raw, t_common, 'linear');
 pwm3_interp = interp1(time_RCOU, pwm3_raw, t_common, 'linear');
 pwm4_interp = interp1(time_RCOU, pwm4_raw, t_common, 'linear');
+
+% Sanity check: as janelas escolhidas estão dentro do log?
+log_t_min = t_common(1);  log_t_max = t_common(end);
+for s = 1:numel(t_trains)
+    if t_trains{s}(1) < log_t_min || t_trains{s}(2) > log_t_max
+        error('identify_plant:badWindow', ...
+            'Janela treino %d [%g, %g] fora do log [%.1f, %.1f]', ...
+            s, t_trains{s}(1), t_trains{s}(2), log_t_min, log_t_max);
+    end
+end
+if t_val(1) < log_t_min || t_val(2) > log_t_max
+    error('identify_plant:badWindow', 'Janela validação fora do log.');
+end
+fprintf('  Log "%s": t = %.1f a %.1f s (%s)\n', ...
+    LOG_FILE, log_t_min, log_t_max, L.format);
 
 %% 3. Motor reference models (motor_models.m centraliza a tabela de bancada)
 [func_T_ref, func_Q_ref] = motor_models();
@@ -108,55 +145,48 @@ pqr_vl  = [gyrX_interp(idx_val)', gyrY_interp(idx_val)', gyrZ_interp(idx_val)'];
 acc_vl  = [accX_interp(idx_val)', accY_interp(idx_val)', accZ_interp(idx_val)'];
 att_vl  = [roll_interp(idx_val)', pitch_interp(idx_val)', yaw_interp(idx_val)'];
 
-%% 5. Parameters: initial guess and physical bounds (24 params)
+%% 5. Parameters: initial guess and physical bounds (22 params)
+%  (dx_cg, dy_cg REMOVIDOS — CG oficial é o ponto de referência do CAD)
 % P(1:4)   = inércias [Jx, Jy, Jz, Jxz]
 % P(5:8)   = k_T1..k_T4
 % P(9:12)  = k_Q1..k_Q4
 % P(13:15) = Dp, Dq, Dr
 % P(16:18) = Bp, Bq, Br
-% P(19:20) = dx_cg, dy_cg  (offset do CG vs CAD, afeta braços de momento)
-% P(21:24) = Xu_m, Yv_m, Zw_m, Bz
+% P(19:22) = Xu_m, Yv_m, Zw_m, Bz
 
-Jx0  = 63.244/1000;
-Jy0  = 250.554/1000;
-Jz0  = 116.192/1000;
-Jxz0 = 1.571/1000;
+% Vem de parameters.m (fonte única)
+proj_params = parameters();
+P0 = proj_params.P0_J;
+lb = proj_params.bounds.lb;
+ub = proj_params.bounds.ub;
+param_names = proj_params.param_names;
 
-P0 = [Jx0; Jy0; Jz0; Jxz0;           ... % Inércias
-      0.55; 0.45; 1.0; 0.75;          ... % k_T
-      0.55; 0.45; 1.0; 0.75;          ... % k_Q
-      10; 5; 0.5;                  ... % Dp, Dq, Dr
-      0.7; 1.4; 0.3;                  ... % Bp, Bq, Br
-      0.0; 0.0;                        ... % dx_cg, dy_cg (chute: CG no CAD)
-      -4.0; -4.0; -0.1; -0.5];             % Xu_m, Yv_m, Zw_m, Bz
+n_params = 22;
+n_rot = 18;  % EEM otimiza P(1:18) — rotacional apenas
 
-lb = [0.032;  0.125;  0.058;  0.0001;   ... % Jx, Jy, Jz, Jxz (±50% do CAD)
-      0.05; 0.05; 0.05; 0.05;         ... % k_T
-      0.10; 0.10; 0.10; 0.10;         ... % k_Q (mín 10% do ref — fisicamente razoável)
-         0;    0;    0;                ... % Dp, Dq, Dr
-       -10;  -10;  -10;               ... % Bp, Bq, Br
-     -0.08; -0.05;                     ... % dx_cg, dy_cg (±8cm, ±5cm)
-       -30;  -30;  -2;  -5];            % Xu_m, Yv_m, Zw_m, Bz
+% ╔══════════════════════════════════════════════════════════════════╗
+% ║  FLAGS de "trava" — força certos parâmetros a valor fixo         ║
+% ║  (lb == ub == valor → lsqnonlin não otimiza esse parâmetro)      ║
+% ╚══════════════════════════════════════════════════════════════════╝
+LOCK_MOTORS = true;    % trava k_T(1:4) e k_Q(1:4) em 1.0 (motores idênticos)
+LOCK_BIASES = false;   % trava Bp, Bq, Br em 0 (depois de subtrair bias offline)
 
-ub = [ 0.095;  0.376;  0.174;  0.006;  ... % Jx, Jy, Jz, Jxz (±50% do CAD)
-         5;    5;    5;    5;          ... % k_T
-       3.0;  3.0;  3.0;  3.0;         ... % k_Q
-        20;    10;    10;                ... % Dp, Dq, Dr
-        10;   10;   10;                ... % Bp, Bq, Br
-      0.08;  0.05;                     ... % dx_cg, dy_cg
-         0;    0;    0;   5];              % Xu_m, Yv_m, Zw_m, Bz
-
-n_params = 24;
-n_rot = 20;  % EEM otimiza P(1:20) — rotacional + CG offsets
-param_names = {'Jx','Jy','Jz','Jxz', ...
-    'k_T1','k_T2','k_T3','k_T4','k_Q1','k_Q2','k_Q3','k_Q4', ...
-    'Dp','Dq','Dr','Bp','Bq','Br', ...
-    'dx_cg','dy_cg', ...
-    'Xu_m','Yv_m','Zw_m','Bz'};
+if LOCK_MOTORS
+    P0(5:12) = 1.0;
+    lb(5:12) = 1.0;
+    ub(5:12) = 1.0;
+    fprintf('  >>> k_T(1:4), k_Q(1:4) TRAVADOS em 1.0 (motores idênticos)\n');
+end
+if LOCK_BIASES
+    P0(16:18) = 0.0;
+    lb(16:18) = 0.0;
+    ub(16:18) = 0.0;
+    fprintf('  >>> Bp, Bq, Br TRAVADOS em 0\n');
+end
 
 R2_func = @(y_e, y_s) 1 - sum((y_e - y_s).^2) / max(sum((y_e - mean(y_e)).^2), 1e-12);
-constants_sim.m = 2.20;   % Massa total medida (era 1.6011, valor do CAD com massa errada)
-constants_sim.g = 9.81;
+constants_sim.m = proj_params.m;
+constants_sim.g = proj_params.g;
 ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);  % Mesmo que Simulink
 
 % Criar pasta de imagens se não existir (centralizado em outputs/images/)
@@ -191,9 +221,8 @@ fprintf('  k_T = [%.4f, %.4f, %.4f, %.4f]\n', diag_P(5:8));
 fprintf('  k_Q = [%.4f, %.4f, %.4f, %.4f]\n', diag_P(9:12));
 fprintf('  Dp=%.4f  Dq=%.4f  Dr=%.4f\n', diag_P(13:15));
 fprintf('  Bp=%.4f  Bq=%.4f  Br=%.4f\n', diag_P(16:18));
-fprintf('  dx_cg=%.4f  dy_cg=%.4f\n', diag_P(19:20));
-fprintf('  Braços: Lx_r=%.6f  Lx_l=%.6f  Ly_f=%.6f  Ly_r=%.6f\n', ...
-    0.232-diag_P(20), 0.232+diag_P(20), 0.311185-diag_P(19), 0.342865+diag_P(19));
+fprintf('  Braços (CG fixo do CAD): Lx_r=%.6f  Lx_l=%.6f  Ly_f=%.6f  Ly_r=%.6f\n', ...
+    0.232, 0.232, 0.311185, 0.342865);
 
 % Derivadas no instante t=0 (para comparação pontual com Simulink)
 t0 = seg1.time(1);
@@ -202,8 +231,8 @@ dy0 = vtol_dynamics(t0, y0_rot, P0, seg1.time, seg1.pwm, func_T_ref, func_Q_ref)
 pwm0 = seg1.pwm(1,:);
 T0 = diag_P(5:8)' .* [func_T_ref(pwm0(1)), func_T_ref(pwm0(2)), func_T_ref(pwm0(3)), func_T_ref(pwm0(4))];
 Q0 = diag_P(9:12)' .* [func_Q_ref(pwm0(1)), func_Q_ref(pwm0(2)), func_Q_ref(pwm0(3)), func_Q_ref(pwm0(4))];
-Lx_r = 0.232-diag_P(20); Lx_l = 0.232+diag_P(20);
-Ly_f = 0.311185-diag_P(19); Ly_r = 0.342865+diag_P(19);
+Lx_r = 0.232; Lx_l = 0.232;
+Ly_f = 0.311185; Ly_r = 0.342865;
 Mx0 = -(Lx_r*T0(1) - Lx_l*T0(2) - Lx_l*T0(3) + Lx_r*T0(4));
 My0 = Ly_f*T0(1) - Ly_r*T0(2) + Ly_f*T0(3) - Ly_r*T0(4);
 Mz0 = Q0(1) + Q0(2) - Q0(3) - Q0(4);
@@ -520,14 +549,13 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
     k_T = P(5:8); k_Q = P(9:12);
     Dp = P(13); Dq = P(14); Dr = P(15);
     Bp = P(16); Bq = P(17); Br = P(18);
-    dx_cg = P(19); dy_cg = P(20);
-    Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
+    Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz = P(22);
 
-    % Braços efetivos com offset do CG
-    Lx_r = 0.232 - dy_cg;   % direita (motores 1,4)
-    Lx_l = 0.232 + dy_cg;   % esquerda (motores 2,3)
-    Ly_f = 0.311185 - dx_cg; % frente (motores 1,3)
-    Ly_r = 0.342865 + dx_cg; % traseira (motores 2,4)
+    % Braços fixos (CG oficial do CAD)
+    Lx_r = 0.232;
+    Lx_l = 0.232;
+    Ly_f = 0.311185;
+    Ly_r = 0.342865;
 
     n_sub = 5;
     dt_sub = dt / n_sub;
@@ -722,7 +750,7 @@ function res = simulate_one_window(P, time, pwm, pqr, att, N, ...
         dyn_h = vtol_dynamics('get_handles');
         spec_force_fn = dyn_h.specific_force;
 
-        Xu_m_p = P(21); Yv_m_p = P(22); Zw_m_p = P(23); Bz_p = P(24);
+        Xu_m_p = P(19); Yv_m_p = P(20); Zw_m_p = P(21); Bz_p = P(22);
         k_T_p = P(5:8);
         m_val = constants_sim.m;
 
@@ -769,7 +797,7 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
     g = constants_sim.g;
     m = constants_sim.m;
     k_T = P(5:8);
-    Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
+    Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz = P(22);
 
     res = struct();
     datasets = {{'tr', time_tr, pwm_tr, pqr_tr, acc_tr, att_tr}, ...
@@ -866,8 +894,7 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
     time_vl, pqr_vl, acc_vl, R2_func, ~, t_val_range, att_vl)
 
     lbl_vl = sprintf('VALIDAÇÃO [%d-%ds]', t_val_range(1), t_val_range(2));
-    safe_titulo = strrep(titulo, ' ', '_');
-    safe_titulo = regexprep(safe_titulo, '[^a-zA-Z0-9_]', '');
+    prefix = stage_prefix(titulo);   % '01_P0_', '02_Pfinal_' ou '03_Pfinal_semi_'
 
     fig1 = figure('Name', ['pqr - ' titulo], 'Position', [80 50 900 700], 'Visible', 'off');
     subplot(3,1,1);
@@ -883,7 +910,7 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
     legend('Exp','Sim'); xlabel('Tempo (s)'); ylabel('r (rad/s)');
     title(sprintf('%s — r (R^2=%.3f)', lbl_vl, R2_func(pqr_vl(:,3), res.r_s_vl))); grid on;
     sgtitle(['Vel. Angulares (Val) — ' titulo]);
-    saveas(fig1, fullfile(setup_paths().images, ['pqr_val_' safe_titulo '.png']));
+    saveas(fig1, fullfile(setup_paths().images, [prefix 'pqr.png']));
 
     fig2 = figure('Name', ['Acc - ' titulo], 'Position', [120 90 900 700], 'Visible', 'off');
     subplot(3,1,1);
@@ -899,7 +926,7 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
     legend('IMU','Sim'); xlabel('Tempo (s)'); ylabel('AccZ (m/s²)');
     title(sprintf('%s — AccZ (R^2=%.3f)', lbl_vl, R2_func(acc_vl(:,3), res.accZ_s_vl))); grid on;
     sgtitle(['Acelerações (Val) — ' titulo]);
-    saveas(fig2, fullfile(setup_paths().images, ['acc_val_' safe_titulo '.png']));
+    saveas(fig2, fullfile(setup_paths().images, [prefix 'acc.png']));
 
     % --- Gráfico de Atitude (phi, theta, psi) ---
     if nargin >= 12 && ~isempty(att_vl) && isfield(res, 'phi_s_vl') && res.pqr_vl_ok
@@ -917,14 +944,13 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
         legend('EKF','Sim'); xlabel('Tempo (s)'); ylabel('\psi (°)');
         title(sprintf('%s — \\psi (R^2=%.3f)', lbl_vl, R2_func(att_vl(:,3), res.psi_s_vl))); grid on;
         sgtitle(['Atitude (Val) — ' titulo]);
-        saveas(fig3, fullfile(setup_paths().images, ['att_val_' safe_titulo '.png']));
+        saveas(fig3, fullfile(setup_paths().images, [prefix 'att.png']));
     end
 end
 
 function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     k_T = P(5:8);
     k_Q = P(9:12);
-    dx_cg = P(19); dy_cg = P(20);
     N_vl = length(time_vl);
 
     T_ref_vl = zeros(N_vl, 4);
@@ -937,11 +963,9 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     Tmr = T_ref_vl .* k_T';
     Qmr = Q_ref_vl .* k_Q';
 
-    % Braços efetivos com offset do CG
-    Lx_r = 0.232 - dy_cg;   % direita (motores 1,4)
-    Lx_l = 0.232 + dy_cg;   % esquerda (motores 2,3)
-    Ly_f = 0.311185 - dx_cg; % frente (motores 1,3)
-    Ly_r = 0.342865 + dx_cg; % traseira (motores 2,4)
+    % Braços fixos (CG oficial do CAD)
+    Lx_r = 0.232; Lx_l = 0.232;
+    Ly_f = 0.311185; Ly_r = 0.342865;
 
     Mx = -(Lx_r*Tmr(:,1) - Lx_l*Tmr(:,2) - Lx_l*Tmr(:,3) + Lx_r*Tmr(:,4));
     My = Ly_f*Tmr(:,1) - Ly_r*Tmr(:,2) + Ly_f*Tmr(:,3) - Ly_r*Tmr(:,4);
@@ -955,27 +979,40 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     title(sprintf('Empuxo individual (k_T=[%.3f, %.3f, %.3f, %.3f])', k_T(1), k_T(2), k_T(3), k_T(4)));
 
     subplot(4,1,2);
+    yyaxis left;
     plot(time_vl, Mx, 'r-', 'LineWidth', 1.3);
-    hold on; plot(time_vl, pqr_vl(:,1)*0.1, 'b--', 'LineWidth', 1); hold off;
-    legend('Mx (N·m)', 'p×0.1 (ref)'); ylabel('Mx (N·m)'); grid on;
-    title(sprintf('Roll: Mx  (Lx_r=%.3f, Lx_l=%.3f, dy_{cg}=%.4f)', Lx_r, Lx_l, dy_cg));
+    ylabel('Mx (N·m)'); set(gca,'YColor','r');
+    yyaxis right;
+    plot(time_vl, pqr_vl(:,1), 'b-', 'LineWidth', 1);
+    ylabel('p (rad/s)'); set(gca,'YColor','b');
+    grid on; legend({'Mx modelo','p medido'}, 'Location','best');
+    title(sprintf('Roll: Mx (modelo)  vs  p (medido)   (Lx=%.3f)', Lx_r));
 
     subplot(4,1,3);
+    yyaxis left;
     plot(time_vl, My, 'r-', 'LineWidth', 1.3);
-    hold on; plot(time_vl, pqr_vl(:,2)*0.1, 'b--', 'LineWidth', 1); hold off;
-    legend('My (N·m)', 'q×0.1 (ref)'); ylabel('My (N·m)'); grid on;
-    title(sprintf('Pitch: My  (Ly_f=%.3f, Ly_r=%.3f, dx_{cg}=%.4f)', Ly_f, Ly_r, dx_cg));
+    ylabel('My (N·m)'); set(gca,'YColor','r');
+    yyaxis right;
+    plot(time_vl, pqr_vl(:,2), 'b-', 'LineWidth', 1);
+    ylabel('q (rad/s)'); set(gca,'YColor','b');
+    grid on; legend({'My modelo','q medido'}, 'Location','best');
+    title(sprintf('Pitch: My (modelo)  vs  q (medido)   (Ly_f=%.3f, Ly_r=%.3f)', Ly_f, Ly_r));
 
     subplot(4,1,4);
+    yyaxis left;
     plot(time_vl, Mz, 'r-', 'LineWidth', 1.3);
-    hold on; plot(time_vl, pqr_vl(:,3)*0.1, 'b--', 'LineWidth', 1); hold off;
-    legend('Mz (N·m)', 'r×0.1 (ref)'); ylabel('Mz (N·m)'); xlabel('Tempo (s)'); grid on;
-    title(sprintf('Yaw: Mz  (k_Q=[%.3f, %.3f, %.3f, %.3f])', k_Q(1), k_Q(2), k_Q(3), k_Q(4)));
+    ylabel('Mz (N·m)'); set(gca,'YColor','r');
+    yyaxis right;
+    plot(time_vl, pqr_vl(:,3), 'b-', 'LineWidth', 1);
+    ylabel('r (rad/s)'); set(gca,'YColor','b');
+    grid on; legend({'Mz modelo','r medido'}, 'Location','best');
+    xlabel('Tempo (s)');
+    title(sprintf('Yaw: Mz (modelo)  vs  r (medido)   (k_Q=[%.3f, %.3f, %.3f, %.3f])', k_Q(1), k_Q(2), k_Q(3), k_Q(4)));
 
-    sgtitle(sprintf('Torques na Validação [%d-%ds]  (dx_{cg}=%.4f, dy_{cg}=%.4f)', t_val(1), t_val(2), dx_cg, dy_cg));
-    saveas(fig3, fullfile(setup_paths().images, 'torques_validacao.png'));
+    sgtitle(sprintf('Torques na Validação [%d-%ds]  (CG fixo do CAD)', t_val(1), t_val(2)));
+    saveas(fig3, fullfile(setup_paths().images, '05_torques.png'));
 
-    fprintf('\n  --- Torques (validação) | dx_cg=%.4f dy_cg=%.4f ---\n', dx_cg, dy_cg);
+    fprintf('\n  --- Torques (validação) | CG fixo do CAD ---\n');
     fprintf('    Braços: Lx_r=%.4f Lx_l=%.4f Ly_f=%.4f Ly_r=%.4f\n', Lx_r, Lx_l, Ly_f, Ly_r);
     fprintf('    Mx: min=%.4f  max=%.4f  std=%.4f\n', min(Mx), max(Mx), std(Mx));
     fprintf('    My: min=%.4f  max=%.4f  std=%.4f\n', min(My), max(My), std(My));
@@ -984,7 +1021,7 @@ end
 
 function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val, res)
     k_T = P(5:8);
-    Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz = P(24);
+    Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz = P(22);
     m = constants_sim.m;
     g = constants_sim.g;
     N_vl = length(time_vl);
@@ -1077,7 +1114,7 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     title(sprintf('Eixo Z: força específica medida vs modelo  (Bz=%.3f, Zw=%.3f)', Bz, Zw_m));
 
     sgtitle(sprintf('Forças Translacionais — Validação [%d-%ds]  (m=%.1f kg)', t_val(1), t_val(2), m));
-    saveas(fig4, fullfile(setup_paths().images, 'forcas_validacao.png'));
+    saveas(fig4, fullfile(setup_paths().images, '06_forcas.png'));
 
     % =====================================================================
     %  Figura 2: Análise dos PWMs por motor
@@ -1130,7 +1167,7 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
         mean(T_ref_total), m*g, mean(T_ref_total)/(m*g)));
 
     sgtitle(sprintf('Análise PWM e Empuxo — Validação [%d-%ds]', t_val(1), t_val(2)));
-    saveas(fig5, fullfile(setup_paths().images, 'pwm_analise.png'));
+    saveas(fig5, fullfile(setup_paths().images, '04_pwm.png'));
 
     % Estatísticas
     fprintf('\n  --- Forças (validação) ---\n');
@@ -1174,5 +1211,21 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
         fprintf('    → Assimetrias ESTÁVEIS: predomina CG offset / diferença de motores\n');
     else
         fprintf('    → Assimetrias VARIÁVEIS: predomina vento / perturbação externa\n');
+    end
+end
+
+function p = stage_prefix(titulo)
+% Mapeia título da etapa para prefixo numerado dos arquivos de imagem.
+%   titulo = 'CHUTE_INICIAL_P0'             -> '01_P0_'
+%   titulo = 'P_final' / 'P0'               -> '02_Pfinal_'
+%   titulo = 'P_final (semi-acoplado)'      -> '03_Pfinal_semi_'
+% Padrão: <ordem>_<stage>_<variável>.png
+    t = lower(titulo);
+    if contains(t, 'p0') || contains(t, 'chute')
+        p = '01_P0_';
+    elseif contains(t, 'semi')
+        p = '03_Pfinal_semi_';
+    else
+        p = '02_Pfinal_';
     end
 end

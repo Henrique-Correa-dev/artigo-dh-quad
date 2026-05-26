@@ -45,9 +45,13 @@ addpath(fileparts(fileparts(mfilename('fullpath'))));   % raiz pra setup_paths
 paths = setup_paths();
 load(fullfile(paths.data, 'log_data.mat'));
 
-% P0 vem de parameters.m (centralizado em 2_model/)
+% Tudo vem de parameters.m (centralizado em 2_model/)
 proj_params = parameters();
 P0_J = proj_params.P0_J;
+
+% v4.slx lê 'mass' e 'g_acc' do base workspace (blocos Massa e Gravidade)
+mass  = proj_params.m;
+g_acc = proj_params.g;
 
 P_file = fullfile(paths.outputs, 'P_identified.mat');
 if use_P0

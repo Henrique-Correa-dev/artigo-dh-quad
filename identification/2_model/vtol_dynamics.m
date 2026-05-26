@@ -10,14 +10,16 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     %   .trans_dot      -> derivadas translacionais [ud, vd, wd]
     %   .specific_force -> forca especifica IMU [fx, fy, fz]
     %
-    % P (mesmo formato em todos os modos):
+    % P (vector de 22 elementos):
     %   P(1:4)   = [Jx, Jy, Jz, Jxz]
     %   P(5:8)   = k_T1..k_T4
     %   P(9:12)  = k_Q1..k_Q4
     %   P(13:15) = Dp, Dq, Dr
     %   P(16:18) = Bp, Bq, Br
-    %   P(19:20) = dx_cg, dy_cg               (opcional, default 0)
-    %   P(21:24) = Xu_m, Yv_m, Zw_m, Bz       (opcional, defaults -4,-4,-0.1,-0.5)
+    %   P(19:22) = Xu_m, Yv_m, Zw_m, Bz       (opcional, defaults -4,-4,-0.1,-0.5)
+    %
+    % NOTA: dx_cg, dy_cg removidos (CG oficial = onde dx=dy=0). Braços fixos
+    % no CAD: Lx=0.232, Ly_f=0.311185, Ly_r=0.342865.
     %
     % constants: struct com .m, .g; OPCIONAL .tau_motor (escalar ou 4x1).
     %            Se length(y)==17 e tau_motor nao especificado, default 0.05 s.
@@ -37,13 +39,8 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     k_Q = P(9:12);
     Dp = P(13); Dq = P(14); Dr = P(15);
     Bp = P(16); Bq = P(17); Br = P(18);
-    if length(P) >= 20
-        dx_cg = P(19); dy_cg = P(20);
-    else
-        dx_cg = 0; dy_cg = 0;
-    end
-    if length(P) >= 24
-        Xu_m = P(21); Yv_m = P(22); Zw_m = P(23); Bz_param = P(24);
+    if length(P) >= 22
+        Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz_param = P(22);
     else
         Xu_m = -4.0; Yv_m = -4.0; Zw_m = -0.1; Bz_param = -0.5;
     end
@@ -60,11 +57,11 @@ function dydt = vtol_dynamics(t, y, P, pwm_time, pwm_signals, func_T_ref, func_Q
     G8 = Jx / gamma0;
     invJy = 1 / Jy;
 
-    %% Bracos com offset do CG
-    Lx_r = 0.232    - dy_cg;
-    Lx_l = 0.232    + dy_cg;
-    Ly_f = 0.311185 - dx_cg;
-    Ly_r = 0.342865 + dx_cg;
+    %% Braços (do CAD — CG oficial está no ponto onde dx_cg=dy_cg=0)
+    Lx_r = 0.232;
+    Lx_l = 0.232;
+    Ly_f = 0.311185;
+    Ly_r = 0.342865;
 
     p = y(1); q = y(2); r = y(3);
 

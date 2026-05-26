@@ -7,8 +7,10 @@ function P_estimated = P_J_to_simulink(P_J)
 %   P_J(9:12)  = k_Q1..k_Q4
 %   P_J(13:15) = Dp, Dq, Dr
 %   P_J(16:18) = Bp, Bq, Br
-%   P_J(19:20) = dx_cg, dy_cg          (opcional, default 0)
-%   P_J(21:24) = Xu, Yv, Zw, Bz        (opcional, defaults -4,-4,-0.1,-0.5)
+%   P_J(19:22) = Xu, Yv, Zw, Bz        (opcional, defaults -4,-4,-0.1,-0.5)
+%
+% NOTA: dx_cg, dy_cg REMOVIDOS do vetor (CG oficial = onde dx=dy=0).
+% v4.slx ainda lê dx_cg/dy_cg do workspace — esta função força ambos a 0.
 %
 % Saida (P_estimated), formato usado por quad_model_v5.slx:
 %   P_estimated(1:8)   = G1..G8        (computados a partir de Jx,Jy,Jz,Jxz)
@@ -64,21 +66,16 @@ function P_estimated = P_J_to_simulink(P_J)
     assignin('base', 'q_bias', P_J(17));
     assignin('base', 'r_bias', P_J(18));
 
-    % CG offset (opcional)
-    if numel(P_J) >= 20
-        assignin('base', 'dx_cg', P_J(19));
-        assignin('base', 'dy_cg', P_J(20));
-    else
-        assignin('base', 'dx_cg', 0);
-        assignin('base', 'dy_cg', 0);
-    end
+    % CG: forçado a 0 (oficial do CAD). v4.slx ainda lê esses do workspace.
+    assignin('base', 'dx_cg', 0);
+    assignin('base', 'dy_cg', 0);
 
     % Parametros translacionais (opcional, com defaults)
-    if numel(P_J) >= 24
-        assignin('base', 'Xu_param', P_J(21));
-        assignin('base', 'Yv_param', P_J(22));
-        assignin('base', 'Zw_param', P_J(23));
-        assignin('base', 'Bz_param', P_J(24));
+    if numel(P_J) >= 22
+        assignin('base', 'Xu_param', P_J(19));
+        assignin('base', 'Yv_param', P_J(20));
+        assignin('base', 'Zw_param', P_J(21));
+        assignin('base', 'Bz_param', P_J(22));
     else
         assignin('base', 'Xu_param', -4.0);
         assignin('base', 'Yv_param', -4.0);

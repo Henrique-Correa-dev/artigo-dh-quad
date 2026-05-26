@@ -11,7 +11,7 @@ function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
 %   P(9:12)  = k_Q1..k_Q4
 %   P(13:15) = Dp, Dq, Dr
 %   P(16:18) = Bp, Bq, Br
-%   P(19:20) = dx_cg, dy_cg  (offset do CG vs CAD)
+%   (dx_cg, dy_cg removidos — CG fixo no CAD)
 
     P = P_scaled(:) .* P0_scale(:);
 
@@ -32,18 +32,11 @@ function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
     Dp = P(13); Dq = P(14); Dr = P(15);
     Bp = P(16); Bq = P(17); Br = P(18);
 
-    % CG offsets (P pode ter 18 ou 20 elementos)
-    if length(P) >= 20
-        dx_cg = P(19); dy_cg = P(20);
-    else
-        dx_cg = 0; dy_cg = 0;
-    end
-
-    % Braços efetivos com offset do CG
-    Lx_r = 0.232 - dy_cg;   % direita (motores 1,4)
-    Lx_l = 0.232 + dy_cg;   % esquerda (motores 2,3)
-    Ly_f = 0.311185 - dx_cg; % frente (motores 1,3)
-    Ly_r = 0.342865 + dx_cg; % traseira (motores 2,4)
+    % Braços fixos (do CAD — CG oficial no ponto de referência)
+    Lx_r = 0.232;   % direita (motores 1,4)
+    Lx_l = 0.232;   % esquerda (motores 2,3)
+    Ly_f = 0.311185; % frente (motores 1,3)
+    Ly_r = 0.342865; % traseira (motores 2,4)
 
     Tmr = T_ref .* k_T';   % N x 4
     Qmr = Q_ref .* k_Q';   % N x 4
