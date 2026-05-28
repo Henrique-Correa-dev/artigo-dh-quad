@@ -62,7 +62,7 @@ fprintf('\n========== MODO: log (v4.slx vs vtol_dynamics.m vs medido) ==========
 show.medido = true;    % verde: dados do log experimental (IMU + EKF)
 show.v4     = true;    % azul: quad_model_v4.slx (Simulink)
 show.script = true;    % vermelho: vtol_dynamics.m (script, 17 estados)
-show.linear = true;    % magenta: modelo linear (precisa outputs/linear_model.mat)
+show.linear = false;    % magenta: modelo linear (precisa outputs/linear_model.mat)
 
 bdclose all;
 evalin('base', 'clearvars');
@@ -582,11 +582,15 @@ for i = 1:4
     Q(i) = k_Q(i) * func_Q(pwm(i));
 end
 
-Lx_r = 0.232;  Lx_l = 0.232;
-Ly_f = 0.311185;  Ly_r = 0.342865;
+% Braços (lidos de parameters() — fonte única de verdade)
+proj_p_cm = parameters();
+Lx_r = proj_p_cm.arms.Lx_r; Lx_l = proj_p_cm.arms.Lx_l;
+Ly_f = proj_p_cm.arms.Ly_f;    Ly_r = proj_p_cm.arms.Ly_r;
 
 Mx = -(Lx_r*T(1) - Lx_l*T(2) - Lx_l*T(3) + Lx_r*T(4));
-My =  (Ly_f*T(1) - Ly_r*T(2) + Ly_f*T(3) - Ly_r*T(4));
+% My — ArduPilot QuadX (M1,M3=FRONT; M2,M4=REAR)
+My =  Ly_f*T(1) - Ly_r*T(2) + Ly_f*T(3) - Ly_r*T(4);
+% Mz: pares DIAGONAIS padrão ArduPilot (M1+M2 CCW, M3+M4 CW)
 Mz =   Q(1) + Q(2) - Q(3) - Q(4);
 T_total = sum(T);
 

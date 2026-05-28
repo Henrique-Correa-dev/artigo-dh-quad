@@ -14,8 +14,8 @@
 % P(5:8)   = k_T1..k_T4
 % P(9:12)  = k_Q1..k_Q4
 % P(13:15) = Dp, Dq, Dr
-% P(16:18) = Bp, Bq, Br
-% P(19:22) = translacionais [Xu_m, Yv_m, Zw_m, Bz]
+% (Bp/Bq/Br, Xu/Yv/Zw, Bz REMOVIDOS — modelo é rotacional puro)
+% (Xu_m, Yv_m, Zw_m REMOVIDOS — não-identificáveis sem ground truth de u,v,w)
 % (dx_cg, dy_cg REMOVIDOS — CG oficial = ponto de referência do CAD)
 
 %% 0. Setup de paths (adiciona subpastas ao MATLAB path)
@@ -35,11 +35,15 @@ paths = setup_paths();
 LOG_FILE = '4 25-05-2026 09-31-48.log-132954.mat';   % ◄── escolher aqui
 
 % Janelas (ATENÇÃO: t em segundos, alinhado com TimeUS do log escolhido)
-% Pro log "4 25-05-2026 09-31-48" (motores novos, voo entre 429-557 s):
+% Pro log "4 25-05-2026 09-31-48" (motores novos, voo entre 429-655 s):
 t_trains = {[473, 483]; ...
-            [484, 494]; ...
-            [495, 505]};
-t_val    = [537, 550];
+            [428, 438];
+            [514, 524]};
+% Janela de validação: usar 600-645s (voo principal, alta excitação de
+% yaw — diagnose_mz confirmou correlação 0.96 nessa janela com Mz_target).
+% A antiga 494-514 dava R² enganoso porque tem r oscilando só em ±0.1,
+% e erro DC pequeno do Mz vira drift visível integrado open-loop.
+t_val    = [473, 524];
 
 % Janelas pro log antigo (mantidas como referência — comente acima e descomente aqui):
 % t_trains = {[157, 167]; [167, 177]; [177, 187]};
@@ -151,8 +155,8 @@ att_vl  = [roll_interp(idx_val)', pitch_interp(idx_val)', yaw_interp(idx_val)'];
 % P(5:8)   = k_T1..k_T4
 % P(9:12)  = k_Q1..k_Q4
 % P(13:15) = Dp, Dq, Dr
-% P(16:18) = Bp, Bq, Br
-% P(19:22) = Xu_m, Yv_m, Zw_m, Bz
+% (Bp/Bq/Br, Xu/Yv/Zw, Bz REMOVIDOS — modelo é rotacional puro)
+% (translacionais drag removidos — só Bz)
 
 % Vem de parameters.m (fonte única)
 proj_params = parameters();
@@ -161,15 +165,43 @@ lb = proj_params.bounds.lb;
 ub = proj_params.bounds.ub;
 param_names = proj_params.param_names;
 
-n_params = 22;
-n_rot = 18;  % EEM otimiza P(1:18) — rotacional apenas
+n_params = 15;
+n_rot = 15;  % EEM otimiza P(1:15) — modelo é PURAMENTE rotacional (J, k_T, k_Q, D)
 
 % ╔══════════════════════════════════════════════════════════════════╗
 % ║  FLAGS de "trava" — força certos parâmetros a valor fixo         ║
 % ║  (lb == ub == valor → lsqnonlin não otimiza esse parâmetro)      ║
 % ╚══════════════════════════════════════════════════════════════════╝
-LOCK_MOTORS = true;    % trava k_T(1:4) e k_Q(1:4) em 1.0 (motores idênticos)
-LOCK_BIASES = false;   % trava Bp, Bq, Br em 0 (depois de subtrair bias offline)
+LOCK_MOTORS = false;   % se true: trava k_T/k_Q em 1.0; se false: deixa
+                       % variar dentro de [0.40, 1.40] (definido em parameters.m)
+
+% Regularização de pares de motores (resolve identifiability)
+%   Em yaw, r_dot só depende de Q1+Q2-Q3-Q4 → individual k_Q não é único.
+%   Penaliza diferença DENTRO de cada par CW/CCW (M1+M2, M3+M4).
+%
+%   Escala do data fit: ~1500 resíduos × magnitude ~1 = Σ(e_dyn)² ~1500.
+%   Pra reg ser comparável: λ * 4 * (Δk_típico)² ≈ 1500. Com Δk~1, λ ≈ 400.
+%
+%   Guia:
+%     λ = 1     → peso ~0.5% do data fit (nada)
+%     λ = 100   → peso ~50% do data fit (motores ficam próximos)
+%     λ = 1000  → peso ~500% (praticamente trava motores do par iguais)
+%     λ = 1e4   → trava forte (use se ainda escapar com 1000)
+REG_LAMBDA.kt_pair = 100;   % penaliza |k_T1-k_T2| e |k_T3-k_T4|
+REG_LAMBDA.kq_pair = 100;   % penaliza |k_Q1-k_Q2| e |k_Q3-k_Q4|
+
+% Modo de cost function — controla quais sinais entram no resíduo:
+%   'rotational' → SÓ p, q, r (ignora acc/translacional)
+%                  Útil quando translacional tem problema estrutural
+%                  (massa errada, bench T_ref off, drag não modelado, etc).
+%                  PROBLEMA: k_T fica solto em magnitude (rot só vê razões
+%                  via momentos assimétricos). Resultado: AccZ_sim diverge
+%                  de AccZ_IMU em ~20% em hover.
+%   'translational' → SÓ acc (ignora pqr) — pra calibrar IMU offset isolado
+%   'full' → tudo (default). k_T é ancorado pelo AccZ ≈ -g em hover.
+%            Recomendado AGORA que drag/Bz foram removidos e accelerometer
+%            é um modelo limpo (só thrust + IMU offset).
+COST_MODE = 'full';
 
 if LOCK_MOTORS
     P0(5:12) = 1.0;
@@ -177,12 +209,11 @@ if LOCK_MOTORS
     ub(5:12) = 1.0;
     fprintf('  >>> k_T(1:4), k_Q(1:4) TRAVADOS em 1.0 (motores idênticos)\n');
 end
-if LOCK_BIASES
-    P0(16:18) = 0.0;
-    lb(16:18) = 0.0;
-    ub(16:18) = 0.0;
-    fprintf('  >>> Bp, Bq, Br TRAVADOS em 0\n');
-end
+fprintf('  >>> Regularização: λ_kT_pair=%.1e  λ_kQ_pair=%.1e\n', ...
+    REG_LAMBDA.kt_pair, REG_LAMBDA.kq_pair);
+
+% NOTA: pra TESTAR parâmetros específicos SEM rodar otimização, use o
+% script separado: 5_validation/validate_params.m
 
 R2_func = @(y_e, y_s) 1 - sum((y_e - y_s).^2) / max(sum((y_e - mean(y_e)).^2), 1e-12);
 constants_sim.m = proj_params.m;
@@ -220,9 +251,10 @@ fprintf('  invJy = %.6f\n', 1/diag_Jy);
 fprintf('  k_T = [%.4f, %.4f, %.4f, %.4f]\n', diag_P(5:8));
 fprintf('  k_Q = [%.4f, %.4f, %.4f, %.4f]\n', diag_P(9:12));
 fprintf('  Dp=%.4f  Dq=%.4f  Dr=%.4f\n', diag_P(13:15));
-fprintf('  Bp=%.4f  Bq=%.4f  Br=%.4f\n', diag_P(16:18));
-fprintf('  Braços (CG fixo do CAD): Lx_r=%.6f  Lx_l=%.6f  Ly_f=%.6f  Ly_r=%.6f\n', ...
-    0.232, 0.232, 0.311185, 0.342865);
+% (Bp, Bq, Br removidos do modelo)
+fprintf('  Braços (de parameters.m): Lx_r=%.6f  Lx_l=%.6f  Ly_f=%.6f  Ly_r=%.6f\n', ...
+    proj_params.arms.Lx_r, proj_params.arms.Lx_l, ...
+    proj_params.arms.Ly_f,    proj_params.arms.Ly_r);
 
 % Derivadas no instante t=0 (para comparação pontual com Simulink)
 t0 = seg1.time(1);
@@ -231,9 +263,10 @@ dy0 = vtol_dynamics(t0, y0_rot, P0, seg1.time, seg1.pwm, func_T_ref, func_Q_ref)
 pwm0 = seg1.pwm(1,:);
 T0 = diag_P(5:8)' .* [func_T_ref(pwm0(1)), func_T_ref(pwm0(2)), func_T_ref(pwm0(3)), func_T_ref(pwm0(4))];
 Q0 = diag_P(9:12)' .* [func_Q_ref(pwm0(1)), func_Q_ref(pwm0(2)), func_Q_ref(pwm0(3)), func_Q_ref(pwm0(4))];
-Lx_r = 0.232; Lx_l = 0.232;
-Ly_f = 0.311185; Ly_r = 0.342865;
+Lx_r = proj_params.arms.Lx_r; Lx_l = proj_params.arms.Lx_l;
+Ly_f = proj_params.arms.Ly_f;    Ly_r = proj_params.arms.Ly_r;
 Mx0 = -(Lx_r*T0(1) - Lx_l*T0(2) - Lx_l*T0(3) + Lx_r*T0(4));
+% My — ArduPilot QuadX (M1,M3=FRONT; M2,M4=REAR)
 My0 = Ly_f*T0(1) - Ly_r*T0(2) + Ly_f*T0(3) - Ly_r*T0(4);
 Mz0 = Q0(1) + Q0(2) - Q0(3) - Q0(4);
 fprintf('\n  --- Estado inicial (t=%.1fs) ---\n', t0);
@@ -286,7 +319,7 @@ var_rd = var(rd_all); if var_rd < 1e-12, var_rd = 1; end
 weights_eem = [1/var_pd; 1/var_qd; 1/var_rd];
 
 cost_eem = @(Prot) eem_cost_function(ones(n_rot,1), Prot, weights_eem, ...
-    p_all, q_all, r_all, pd_all, qd_all, rd_all, Tr_all, Qr_all);
+    p_all, q_all, r_all, pd_all, qd_all, rd_all, Tr_all, Qr_all, REG_LAMBDA);
 
 opts_eem = optimoptions('lsqnonlin', ...
     'Algorithm', 'trust-region-reflective', ...
@@ -300,6 +333,20 @@ opts_eem = optimoptions('lsqnonlin', ...
 P_eem = [P_eem_rot; P0(n_rot+1:n_params)];
 
 fprintf('\n  EEM Resnorm: %.4f  |  Exit flag: %d\n', rn_eem, ef_eem);
+
+% Breakdown reg vs data — pra calibrar λ
+e_eem_final = cost_eem(P_eem_rot);
+n_reg = 4;  % 4 resíduos de regularização (kt12, kt34, kq12, kq34)
+rn_data = sum(e_eem_final(1:end-n_reg).^2);
+rn_reg  = sum(e_eem_final(end-n_reg+1:end).^2);
+fprintf('  Breakdown: data=%.4f  reg=%.4f  (reg/data = %.2f%%)\n', ...
+    rn_data, rn_reg, 100*rn_reg/max(rn_data, 1e-12));
+fprintf('  k_T par: [%.3f,%.3f] vs [%.3f,%.3f]   Δ=%.3f,%.3f\n', ...
+    P_eem_rot(5), P_eem_rot(6), P_eem_rot(7), P_eem_rot(8), ...
+    P_eem_rot(5)-P_eem_rot(6), P_eem_rot(7)-P_eem_rot(8));
+fprintf('  k_Q par: [%.3f,%.3f] vs [%.3f,%.3f]   Δ=%.3f,%.3f\n', ...
+    P_eem_rot(9), P_eem_rot(10), P_eem_rot(11), P_eem_rot(12), ...
+    P_eem_rot(9)-P_eem_rot(10), P_eem_rot(11)-P_eem_rot(12));
 for i = 1:n_rot
     fprintf('    %-6s: %12.6f  (chute: %12.6f)\n', param_names{i}, P_eem(i), P0(i));
 end
@@ -341,7 +388,8 @@ for stage = 1:length(win_durations)
     fprintf('==========================================================\n');
 
     cost_oem = @(P) oem_multi_seg_cost(P, segs, win_sec, ...
-        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc);
+        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc, ...
+        COST_MODE, REG_LAMBDA);
 
     max_iter = 500;
     if isinf(win_sec), max_iter = 1000; end
@@ -454,6 +502,24 @@ res_sc_P0 = simulate_full_semicoupled(P0, sg.time, sg.pwm, sg.pqr, sg.acc, sg.at
     time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
     func_T_ref, func_Q_ref, constants_sim, []);
 
+%% ========================================================================
+%  9c. VALIDAÇÃO HÍBRIDA (att medida, pqr integrado HONESTO)
+%      Isola o modelo ROTACIONAL: testa pqr sem o drift da att integrada.
+%  ========================================================================
+fprintf('\n==========================================================\n');
+fprintf('  VALIDAÇÃO HÍBRIDA (pqr integrado + att medida)\n');
+fprintf('==========================================================\n');
+
+res_hyb_final = simulate_full_hybrid(P_final, sg.time, sg.pwm, sg.pqr, sg.acc, sg.att, ...
+    time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
+    func_T_ref, func_Q_ref, constants_sim, []);
+
+print_R2('P_final (hibrido)', res_hyb_final, sg.pqr, pqr_vl, sg.acc, acc_vl, ...
+    t_trains{1}, t_val, R2_func);
+
+plot_all_results('P_final (hibrido)', ...
+    res_hyb_final, sg.time, sg.pqr, sg.acc, time_vl, pqr_vl, acc_vl, R2_func, t_trains{1}, t_val, att_vl);
+
 %% 10. RESUMO FINAL: P0 vs P_final (apenas validação)
 fprintf('\n==========================================================\n');
 fprintf('  RESUMO FINAL — Validação (%d-%ds)\n', t_val(1), t_val(2));
@@ -493,10 +559,15 @@ disp('Script finalizado.');
 %  FUNÇÕES LOCAIS
 %  ========================================================================
 
-function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights_acc, cost_mode)
+function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights_acc, cost_mode, reg_lambda)
 % Custo OEM multi-segmento: concatena resíduos de cada segmento.
 % cost_mode: 'full' (padrão), 'rotational', 'translational'
+% reg_lambda: struct .kt_pair .kq_pair (penaliza diferenças dentro de par CW/CCW)
     if nargin < 9, cost_mode = 'full'; end
+    if nargin < 10, reg_lambda = struct('kt_pair', 0, 'kq_pair', 0); end
+    if ~isfield(reg_lambda, 'kt_pair'), reg_lambda.kt_pair = 0; end
+    if ~isfield(reg_lambda, 'kq_pair'), reg_lambda.kq_pair = 0; end
+
     e_all = [];
     for s = 1:length(segs)
         sg = segs{s};
@@ -520,7 +591,15 @@ function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights
 
         e_all = [e_all; e_seg]; %#ok<AGROW>
     end
-    e = e_all;
+
+    % Regularização: penaliza diferenças dentro do mesmo par CW/CCW
+    k_T = P(5:8);  k_Q = P(9:12);
+    e_reg = [sqrt(reg_lambda.kt_pair) * (k_T(1) - k_T(2)); ...
+             sqrt(reg_lambda.kt_pair) * (k_T(3) - k_T(4)); ...
+             sqrt(reg_lambda.kq_pair) * (k_Q(1) - k_Q(2)); ...
+             sqrt(reg_lambda.kq_pair) * (k_Q(3) - k_Q(4))];
+
+    e = [e_all; e_reg];
 end
 
 function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, ...
@@ -530,8 +609,9 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
 
     % Obter handles centralizados do vtol_dynamics (edite apenas lá!)
     dyn_h = vtol_dynamics('get_handles');
-    trans_dot_fn   = dyn_h.trans_dot;
-    spec_force_fn  = dyn_h.specific_force;
+    trans_dot_fn = dyn_h.trans_dot;
+    % Acelerômetro: arquivo separado (modelo de sensor, não de planta).
+    % IMU offset r_imu lido de parameters().
 
     % Inércias → constantes G (corpo rígido, consistência garantida)
     Jx = P(1); Jy = P(2); Jz = P(3); Jxz = P(4);
@@ -548,14 +628,15 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
 
     k_T = P(5:8); k_Q = P(9:12);
     Dp = P(13); Dq = P(14); Dr = P(15);
-    Bp = P(16); Bq = P(17); Br = P(18);
-    Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz = P(22);
+    % Bp/Bq/Br, Xu/Yv/Zw, Bz removidos do modelo
 
-    % Braços fixos (CG oficial do CAD)
-    Lx_r = 0.232;
-    Lx_l = 0.232;
-    Ly_f = 0.311185;
-    Ly_r = 0.342865;
+    % Braços + IMU offset (de parameters() — fonte única)
+    proj_p_oem = parameters();
+    Lx_r = proj_p_oem.arms.Lx_r;
+    Lx_l = proj_p_oem.arms.Lx_l;
+    Ly_f = proj_p_oem.arms.Ly_f;
+    Ly_r = proj_p_oem.arms.Ly_r;
+    r_imu = proj_p_oem.imu_offset;
 
     n_sub = 5;
     dt_sub = dt / n_sub;
@@ -575,31 +656,32 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
         for k = i_s:i_e-1
             Tmr = k_T(:)' .* T_ref(k,:);
             Qmr = k_Q(:)' .* Q_ref(k,:);
+            % Momentos — ArduPilot QuadX (M1,M3=FRONT; M2,M4=REAR)
             Mx = -(Lx_r*Tmr(1) - Lx_l*Tmr(2) - Lx_l*Tmr(3) + Lx_r*Tmr(4));
-            My = Ly_f*Tmr(1) - Ly_r*Tmr(2) + Ly_f*Tmr(3) - Ly_r*Tmr(4);
+            My =  Ly_f*Tmr(1) - Ly_r*Tmr(2) + Ly_f*Tmr(3) - Ly_r*Tmr(4);
             Mz = Qmr(1) + Qmr(2) - Qmr(3) - Qmr(4);
 
             for si = 1:n_sub
                 % RK4 sub-stepping (Mx, My, Mz constantes no sub-step)
                 % k1
-                pd1 = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps + Bp;
-                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs + Bq;
-                rd1 = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs + Br;
+                pd1 = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps;
+                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs;
+                rd1 = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs;
                 % k2
                 p2 = ps+h2*pd1; q2 = qs+h2*qd1; r2 = rs+h2*rd1;
-                pd2 = G1*p2*q2 - G2*q2*r2 + G3*Mx + G4*Mz - Dp*p2 + Bp;
-                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*My - Dq*q2 + Bq;
-                rd2 = G7*p2*q2 - G1*q2*r2 + G4*Mx + G8*Mz - Dr*r2 + Br;
+                pd2 = G1*p2*q2 - G2*q2*r2 + G3*Mx + G4*Mz - Dp*p2;
+                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*My - Dq*q2;
+                rd2 = G7*p2*q2 - G1*q2*r2 + G4*Mx + G8*Mz - Dr*r2;
                 % k3
                 p3 = ps+h2*pd2; q3 = qs+h2*qd2; r3 = rs+h2*rd2;
-                pd3 = G1*p3*q3 - G2*q3*r3 + G3*Mx + G4*Mz - Dp*p3 + Bp;
-                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*My - Dq*q3 + Bq;
-                rd3 = G7*p3*q3 - G1*q3*r3 + G4*Mx + G8*Mz - Dr*r3 + Br;
+                pd3 = G1*p3*q3 - G2*q3*r3 + G3*Mx + G4*Mz - Dp*p3;
+                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*My - Dq*q3;
+                rd3 = G7*p3*q3 - G1*q3*r3 + G4*Mx + G8*Mz - Dr*r3;
                 % k4
                 p4 = ps+dt_sub*pd3; q4 = qs+dt_sub*qd3; r4 = rs+dt_sub*rd3;
-                pd4 = G1*p4*q4 - G2*q4*r4 + G3*Mx + G4*Mz - Dp*p4 + Bp;
-                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*My - Dq*q4 + Bq;
-                rd4 = G7*p4*q4 - G1*q4*r4 + G4*Mx + G8*Mz - Dr*r4 + Br;
+                pd4 = G1*p4*q4 - G2*q4*r4 + G3*Mx + G4*Mz - Dp*p4;
+                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*My - Dq*q4;
+                rd4 = G7*p4*q4 - G1*q4*r4 + G4*Mx + G8*Mz - Dr*r4;
                 % update
                 ps = ps + dt_sub/6*(pd1 + 2*pd2 + 2*pd3 + pd4);
                 qs = qs + dt_sub/6*(qd1 + 2*qd2 + 2*qd3 + qd4);
@@ -644,16 +726,16 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
         us = u_int(k); vs = v_int(k); ws = w_int(k);
         for si = 1:n_sub_t
             % k1
-            [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m);
             % k2
             u2=us+h2_t*ud1; v2=vs+h2_t*vd1; w2=ws+h2_t*wd1;
-            [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m);
             % k3
             u3=us+h2_t*ud2; v3=vs+h2_t*vd2; w3=ws+h2_t*wd2;
-            [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m);
             % k4
             u4=us+dt_sub_t*ud3; v4=vs+dt_sub_t*vd3; w4=ws+dt_sub_t*wd3;
-            [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+            [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m);
             % update
             us = us + dt_sub_t/6*(ud1 + 2*ud2 + 2*ud3 + ud4);
             vs = vs + dt_sub_t/6*(vd1 + 2*vd2 + 2*vd3 + vd4);
@@ -670,11 +752,17 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
         u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
     end
 
-    % Saída do modelo (derivada completa, gz subtraído em z) — via subfunção centralizada
-    [accX_m, accY_m, accZ_m] = spec_force_fn( ...
+    % Saída do modelo (acelerômetro como sensor — arquivo separado).
+    % α via derivada numérica de p, q, r (no caso da cost: pqr medido).
+    p_dot_sig = gradient(pqr(:,1), dt);
+    q_dot_sig = gradient(pqr(:,2), dt);
+    r_dot_sig = gradient(pqr(:,3), dt);
+    [accX_m, accY_m, accZ_m] = accelerometer_model( ...
         pqr(:,1), pqr(:,2), pqr(:,3), ...
         u_int, v_int, w_int, ...
-        gx, gy, gz, T_total/m, Xu_m, Yv_m, Zw_m, Bz);
+        T_total/m, ...
+        p_dot_sig, q_dot_sig, r_dot_sig, ...
+        r_imu);
 
     sw_a = sqrt(weights_acc(:));
     e_acc = [sw_a(1)*(acc(:,1) - accX_m); ...
@@ -746,11 +834,11 @@ function res = simulate_one_window(P, time, pwm, pqr, att, N, ...
         res.(['theta_s_' suffix]) = rad2deg(y_out(:,5));
         res.(['psi_s_' suffix])   = rad2deg(y_out(:,6));
 
-        % Força específica via subfunção centralizada do vtol_dynamics
-        dyn_h = vtol_dynamics('get_handles');
-        spec_force_fn = dyn_h.specific_force;
+        % Acelerômetro: modelo de sensor (arquivo separado).
+        % Inclui α × r + ω × (ω × r) com IMU offset de parameters().
+        proj_p_sw = parameters();
+        r_imu_sw = proj_p_sw.imu_offset;
 
-        Xu_m_p = P(19); Yv_m_p = P(20); Zw_m_p = P(21); Bz_p = P(22);
         k_T_p = P(5:8);
         m_val = constants_sim.m;
 
@@ -760,14 +848,17 @@ function res = simulate_one_window(P, time, pwm, pqr, att, N, ...
                 T_vec(k) = T_vec(k) + k_T_p(j) * func_T_ref(pwm(k,j));
             end
         end
-        g_val = constants_sim.g;
-        gx_sw = -g_val * sin(y_out(:,5));
-        gy_sw =  g_val * sin(y_out(:,4)) .* cos(y_out(:,5));
-        gz_sw =  g_val * cos(y_out(:,4)) .* cos(y_out(:,5));
-        [accX, accY, accZ] = spec_force_fn( ...
+        % Derivadas de p, q, r por gradient (pra termo de Euler α × r)
+        dt_sw = time(2) - time(1);
+        p_dot_sw = gradient(y_out(:,1), dt_sw);
+        q_dot_sw = gradient(y_out(:,2), dt_sw);
+        r_dot_sw = gradient(y_out(:,3), dt_sw);
+        [accX, accY, accZ] = accelerometer_model( ...
             y_out(:,1), y_out(:,2), y_out(:,3), ...
             y_out(:,7), y_out(:,8), y_out(:,9), ...
-            gx_sw, gy_sw, gz_sw, T_vec/m_val, Xu_m_p, Yv_m_p, Zw_m_p, Bz_p);
+            T_vec/m_val, ...
+            p_dot_sw, q_dot_sw, r_dot_sw, ...
+            r_imu_sw);
         res.(['accX_s_' suffix]) = accX;
         res.(['accY_s_' suffix]) = accY;
         res.(['accZ_s_' suffix]) = accZ;
@@ -791,13 +882,15 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
 % Retorna struct com mesmos campos que simulate_full (compatível com plots).
 
     dyn_h = vtol_dynamics('get_handles');
-    trans_dot_fn  = dyn_h.trans_dot;
-    spec_force_fn = dyn_h.specific_force;
+    trans_dot_fn = dyn_h.trans_dot;
+    % Acelerômetro: arquivo separado (sensor)
 
     g = constants_sim.g;
     m = constants_sim.m;
     k_T = P(5:8);
-    Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz = P(22);
+
+    proj_p_sc = parameters();
+    r_imu_sc = proj_p_sc.imu_offset;
 
     res = struct();
     datasets = {{'tr', time_tr, pwm_tr, pqr_tr, acc_tr, att_tr}, ...
@@ -850,13 +943,13 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
 
             us = u_int(k); vs = v_int(k); ws = w_int(k);
             for si = 1:n_sub
-                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m);
                 u2=us+h2*ud1; v2=vs+h2*vd1; w2=ws+h2*wd1;
-                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m);
                 u3=us+h2*ud2; v3=vs+h2*vd2; w3=ws+h2*wd2;
-                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m);
                 u4=us+dt_sub*ud3; v4=vs+dt_sub*vd3; w4=ws+dt_sub*wd3;
-                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, Xu_m,Yv_m,Zw_m,Bz);
+                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m);
                 us = us + dt_sub/6*(ud1+2*ud2+2*ud3+ud4);
                 vs = vs + dt_sub/6*(vd1+2*vd2+2*vd3+vd4);
                 ws = ws + dt_sub/6*(wd1+2*wd2+2*wd3+wd4);
@@ -864,11 +957,192 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
             u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
         end
 
-        % Saída do modelo via subfunção centralizada
-        [accX, accY, accZ] = spec_force_fn( ...
+        % Saída do modelo via accelerometer_model (sensor)
+        p_dot_sc = gradient(pqr(:,1), dt);
+        q_dot_sc = gradient(pqr(:,2), dt);
+        r_dot_sc = gradient(pqr(:,3), dt);
+        [accX, accY, accZ] = accelerometer_model( ...
             pqr(:,1), pqr(:,2), pqr(:,3), ...
             u_int, v_int, w_int, ...
-            gx, gy, gz, T_total/m, Xu_m, Yv_m, Zw_m, Bz);
+            T_total/m, ...
+            p_dot_sc, q_dot_sc, r_dot_sc, ...
+            r_imu_sc);
+
+        res.(['accX_s_' suffix]) = accX;
+        res.(['accY_s_' suffix]) = accY;
+        res.(['accZ_s_' suffix]) = accZ;
+        res.(['full_' suffix '_ok']) = true;
+    end
+end
+
+function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, ...
+    time_vl, pwm_vl, pqr_vl, acc_vl, att_vl, ...
+    func_T_ref, func_Q_ref, constants_sim, ~)
+% Validação HÍBRIDA: integra p,q,r normalmente (testa rotacional) mas
+% usa atitude MEDIDA do EKF para gravidade no translacional (sem drift).
+% Diferente do semi-acoplado: pqr aqui é INTEGRADO, não passthrough.
+
+    dyn_h = vtol_dynamics('get_handles');
+    trans_dot_fn = dyn_h.trans_dot;
+    % Acelerômetro: arquivo separado (sensor)
+
+    g = constants_sim.g;
+    m = constants_sim.m;
+
+    % Parâmetros (igual ao oem_ms_cost_func)
+    Jx = P(1); Jy = P(2); Jz = P(3); Jxz = P(4);
+    gamma0 = Jx*Jz - Jxz^2;
+    G1 = Jxz*(Jx - Jy + Jz) / gamma0;
+    G2 = (Jz*(Jz - Jy) + Jxz^2) / gamma0;
+    G3 = Jz / gamma0;
+    G4 = Jxz / gamma0;
+    G5 = (Jz - Jx) / Jy;
+    G6 = Jxz / Jy;
+    G7 = (Jx*(Jx - Jy) + Jxz^2) / gamma0;
+    G8 = Jx / gamma0;
+    invJy = 1 / Jy;
+
+    k_T = P(5:8); k_Q = P(9:12);
+    Dp = P(13); Dq = P(14); Dr = P(15);
+    % Bp/Bq/Br, Xu/Yv/Zw, Bz removidos do modelo
+
+    % Braços + IMU offset (de parameters() — fonte única)
+    proj_p_sim = parameters();
+    Lx_r = proj_p_sim.arms.Lx_r; Lx_l = proj_p_sim.arms.Lx_l;
+    Ly_f = proj_p_sim.arms.Ly_f; Ly_r = proj_p_sim.arms.Ly_r;
+    r_imu_hyb = proj_p_sim.imu_offset;
+
+    res = struct();
+    datasets = {{'tr', time_tr, pwm_tr, pqr_tr, acc_tr, att_tr}, ...
+                {'vl', time_vl, pwm_vl, pqr_vl, acc_vl, att_vl}};
+
+    for d = 1:2
+        suffix = datasets{d}{1};
+        time   = datasets{d}{2};
+        pwm    = datasets{d}{3};
+        pqr    = datasets{d}{4};
+        att    = datasets{d}{6};
+        N = length(time);
+        dt = time(2) - time(1);
+
+        % T_ref e Q_ref
+        T_ref = zeros(N, 4);
+        Q_ref = zeros(N, 4);
+        for j = 1:4
+            T_ref(:,j) = func_T_ref(pwm(:,j));
+            Q_ref(:,j) = func_Q_ref(pwm(:,j));
+        end
+
+        % ============================================================
+        % INTEGRAR p, q, r (RK4 sub-steps) - igual ao oem_ms_cost_func
+        % ============================================================
+        n_sub = 5;
+        dt_sub = dt / n_sub;
+        h2 = dt_sub / 2;
+        MAX_VAL = 50;
+
+        p_sim = zeros(N, 1); q_sim = zeros(N, 1); r_sim = zeros(N, 1);
+        ps = pqr(1,1); qs = pqr(1,2); rs = pqr(1,3);   % IC do primeiro medido
+        p_sim(1) = ps; q_sim(1) = qs; r_sim(1) = rs;
+
+        for k = 1:N-1
+            Tmr = k_T(:)' .* T_ref(k,:);
+            Qmr = k_Q(:)' .* Q_ref(k,:);
+            % Momentos — ArduPilot QuadX (M1,M3=FRONT; M2,M4=REAR)
+            Mx = -(Lx_r*Tmr(1) - Lx_l*Tmr(2) - Lx_l*Tmr(3) + Lx_r*Tmr(4));
+            My =  Ly_f*Tmr(1) - Ly_r*Tmr(2) + Ly_f*Tmr(3) - Ly_r*Tmr(4);
+            Mz = Qmr(1) + Qmr(2) - Qmr(3) - Qmr(4);
+
+            for si = 1:n_sub
+                pd1 = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps;
+                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs;
+                rd1 = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs;
+                p2 = ps+h2*pd1; q2 = qs+h2*qd1; r2 = rs+h2*rd1;
+                pd2 = G1*p2*q2 - G2*q2*r2 + G3*Mx + G4*Mz - Dp*p2;
+                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*My - Dq*q2;
+                rd2 = G7*p2*q2 - G1*q2*r2 + G4*Mx + G8*Mz - Dr*r2;
+                p3 = ps+h2*pd2; q3 = qs+h2*qd2; r3 = rs+h2*rd2;
+                pd3 = G1*p3*q3 - G2*q3*r3 + G3*Mx + G4*Mz - Dp*p3;
+                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*My - Dq*q3;
+                rd3 = G7*p3*q3 - G1*q3*r3 + G4*Mx + G8*Mz - Dr*r3;
+                p4 = ps+dt_sub*pd3; q4 = qs+dt_sub*qd3; r4 = rs+dt_sub*rd3;
+                pd4 = G1*p4*q4 - G2*q4*r4 + G3*Mx + G4*Mz - Dp*p4;
+                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*My - Dq*q4;
+                rd4 = G7*p4*q4 - G1*q4*r4 + G4*Mx + G8*Mz - Dr*r4;
+                ps = ps + dt_sub/6 * (pd1 + 2*pd2 + 2*pd3 + pd4);
+                qs = qs + dt_sub/6 * (qd1 + 2*qd2 + 2*qd3 + qd4);
+                rs = rs + dt_sub/6 * (rd1 + 2*rd2 + 2*rd3 + rd4);
+            end
+            if ~isfinite(ps), ps = MAX_VAL; end
+            if ~isfinite(qs), qs = MAX_VAL; end
+            if ~isfinite(rs), rs = MAX_VAL; end
+            ps = max(min(ps, MAX_VAL), -MAX_VAL);
+            qs = max(min(qs, MAX_VAL), -MAX_VAL);
+            rs = max(min(rs, MAX_VAL), -MAX_VAL);
+            p_sim(k+1) = ps; q_sim(k+1) = qs; r_sim(k+1) = rs;
+        end
+
+        res.(['p_s_' suffix]) = p_sim;
+        res.(['q_s_' suffix]) = q_sim;
+        res.(['r_s_' suffix]) = r_sim;
+        res.(['pqr_' suffix '_ok']) = true;
+
+        % Atitude: pra plot, mostra a MEDIDA (já que não é integrada)
+        res.(['phi_s_' suffix])   = att(:,1);
+        res.(['theta_s_' suffix]) = att(:,2);
+        res.(['psi_s_' suffix])   = att(:,3);
+
+        % ============================================================
+        % INTEGRAR u, v, w usando pqr SIMULADO + att MEDIDA pra gravidade
+        % ============================================================
+        T_total = zeros(N,1);
+        for k = 1:N
+            T_total(k) = sum(k_T(:)' .* T_ref(k,:));
+        end
+
+        att_rad = deg2rad(att);
+        phi_m = att_rad(:,1); theta_m = att_rad(:,2);
+        gx = -g * sin(theta_m);
+        gy =  g * cos(theta_m) .* sin(phi_m);
+        gz =  g * cos(theta_m) .* cos(phi_m);
+
+        n_sub_t = n_sub;
+        dt_sub_t = dt / n_sub_t;
+        h2_t = dt_sub_t / 2;
+
+        u_int = zeros(N,1); v_int = zeros(N,1); w_int = zeros(N,1);
+        for k = 1:N-1
+            pk = p_sim(k); qk = q_sim(k); rk = r_sim(k);  % ← simulado, não medido
+            gxk = gx(k); gyk = gy(k); gzk = gz(k);
+            Tk_m = T_total(k)/m;
+
+            us = u_int(k); vs = v_int(k); ws = w_int(k);
+            for si = 1:n_sub_t
+                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m);
+                u2=us+h2_t*ud1; v2=vs+h2_t*vd1; w2=ws+h2_t*wd1;
+                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m);
+                u3=us+h2_t*ud2; v3=vs+h2_t*vd2; w3=ws+h2_t*wd2;
+                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m);
+                u4=us+dt_sub_t*ud3; v4=vs+dt_sub_t*vd3; w4=ws+dt_sub_t*wd3;
+                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m);
+                us = us + dt_sub_t/6*(ud1+2*ud2+2*ud3+ud4);
+                vs = vs + dt_sub_t/6*(vd1+2*vd2+2*vd3+vd4);
+                ws = ws + dt_sub_t/6*(wd1+2*wd2+2*wd3+wd4);
+            end
+            u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
+        end
+
+        % Aceleração específica IMU via accelerometer_model (sensor)
+        % Usa pqr SIMULADO + α por derivada numérica do pqr SIMULADO
+        p_dot_hyb = gradient(p_sim, dt);
+        q_dot_hyb = gradient(q_sim, dt);
+        r_dot_hyb = gradient(r_sim, dt);
+        [accX, accY, accZ] = accelerometer_model( ...
+            p_sim, q_sim, r_sim, ...
+            u_int, v_int, w_int, ...
+            T_total/m, ...
+            p_dot_hyb, q_dot_hyb, r_dot_hyb, ...
+            r_imu_hyb);
 
         res.(['accX_s_' suffix]) = accX;
         res.(['accY_s_' suffix]) = accY;
@@ -963,12 +1237,15 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     Tmr = T_ref_vl .* k_T';
     Qmr = Q_ref_vl .* k_Q';
 
-    % Braços fixos (CG oficial do CAD)
-    Lx_r = 0.232; Lx_l = 0.232;
-    Ly_f = 0.311185; Ly_r = 0.342865;
+    % Braços (lidos de parameters() — fonte única de verdade)
+    proj_p_pt = parameters();
+    Lx_r = proj_p_pt.arms.Lx_r; Lx_l = proj_p_pt.arms.Lx_l;
+    Ly_f = proj_p_pt.arms.Ly_f;    Ly_r = proj_p_pt.arms.Ly_r;
 
     Mx = -(Lx_r*Tmr(:,1) - Lx_l*Tmr(:,2) - Lx_l*Tmr(:,3) + Lx_r*Tmr(:,4));
-    My = Ly_f*Tmr(:,1) - Ly_r*Tmr(:,2) + Ly_f*Tmr(:,3) - Ly_r*Tmr(:,4);
+    % My — ArduPilot QuadX (M1,M3=FRONT; M2,M4=REAR)
+    My =  Ly_f*Tmr(:,1) - Ly_r*Tmr(:,2) + Ly_f*Tmr(:,3) - Ly_r*Tmr(:,4);
+    % Mz: pares DIAGONAIS padrão ArduPilot (M1+M2 CCW, M3+M4 CW)
     Mz = Qmr(:,1) + Qmr(:,2) - Qmr(:,3) - Qmr(:,4);
 
     fig3 = figure('Name', 'Torques Validação', 'Position', [80 50 1000 900], 'Visible', 'off');
@@ -987,6 +1264,7 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     ylabel('p (rad/s)'); set(gca,'YColor','b');
     grid on; legend({'Mx modelo','p medido'}, 'Location','best');
     title(sprintf('Roll: Mx (modelo)  vs  p (medido)   (Lx=%.3f)', Lx_r));
+    align_yyaxis_zero(gca);
 
     subplot(4,1,3);
     yyaxis left;
@@ -997,6 +1275,7 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     ylabel('q (rad/s)'); set(gca,'YColor','b');
     grid on; legend({'My modelo','q medido'}, 'Location','best');
     title(sprintf('Pitch: My (modelo)  vs  q (medido)   (Ly_f=%.3f, Ly_r=%.3f)', Ly_f, Ly_r));
+    align_yyaxis_zero(gca);
 
     subplot(4,1,4);
     yyaxis left;
@@ -1008,6 +1287,7 @@ function plot_torques(P, time_vl, pwm_vl, func_T_ref, func_Q_ref, pqr_vl, t_val)
     grid on; legend({'Mz modelo','r medido'}, 'Location','best');
     xlabel('Tempo (s)');
     title(sprintf('Yaw: Mz (modelo)  vs  r (medido)   (k_Q=[%.3f, %.3f, %.3f, %.3f])', k_Q(1), k_Q(2), k_Q(3), k_Q(4)));
+    align_yyaxis_zero(gca);
 
     sgtitle(sprintf('Torques na Validação [%d-%ds]  (CG fixo do CAD)', t_val(1), t_val(2)));
     saveas(fig3, fullfile(setup_paths().images, '05_torques.png'));
@@ -1021,7 +1301,8 @@ end
 
 function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_sim, t_val, res)
     k_T = P(5:8);
-    Xu_m = P(19); Yv_m = P(20); Zw_m = P(21); Bz = P(22);
+    % drag e Bz removidos do modelo
+    Xu_m = 0; Yv_m = 0; Zw_m = 0; Bz = 0;
     m = constants_sim.m;
     g = constants_sim.g;
     N_vl = length(time_vl);
@@ -1068,7 +1349,7 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     if res.full_vl_ok
         plot(time_vl, res.accX_s_vl, 'r--', 'LineWidth', 1.3);
     end
-    plot(time_vl, gx, 'k:', 'LineWidth', 0.8);
+    plot(time_vl, gx, 'Color', [1.0 0.6 0.0], 'LineStyle', ':', 'LineWidth', 1.2);
     hold off;
     if res.full_vl_ok
         legend('AccX_{IMU} (medido)', 'AccX_{modelo}', 'gx = -g sin\theta');
@@ -1085,7 +1366,7 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     if res.full_vl_ok
         plot(time_vl, res.accY_s_vl, 'r--', 'LineWidth', 1.3);
     end
-    plot(time_vl, gy, 'k:', 'LineWidth', 0.8);
+    plot(time_vl, gy, 'Color', [1.0 0.6 0.0], 'LineStyle', ':', 'LineWidth', 1.2);
     hold off;
     if res.full_vl_ok
         legend('AccY_{IMU} (medido)', 'AccY_{modelo}', 'gy = g cos\theta sin\phi');
@@ -1102,8 +1383,8 @@ function plot_forces(P, time_vl, pwm_vl, att_vl, acc_vl, func_T_ref, constants_s
     if res.full_vl_ok
         plot(time_vl, res.accZ_s_vl, 'r--', 'LineWidth', 1.3);
     end
-    plot(time_vl, Fz_m, 'k:', 'LineWidth', 0.8);
-    yline(-g, 'k--', 'LineWidth', 0.6);
+    plot(time_vl, Fz_m, 'Color', [1.0 0.6 0.0], 'LineStyle', ':', 'LineWidth', 1.2);
+    yline(-g, 'Color', [0.6 0.6 0.6], 'LineStyle', '--', 'LineWidth', 0.8);
     hold off;
     if res.full_vl_ok
         legend('AccZ_{IMU} (medido)', 'AccZ_{modelo}', 'Fz/m = -T/m+gz', '-g');
@@ -1217,14 +1498,17 @@ end
 function p = stage_prefix(titulo)
 % Mapeia título da etapa para prefixo numerado dos arquivos de imagem.
 %   titulo = 'CHUTE_INICIAL_P0'             -> '01_P0_'
-%   titulo = 'P_final' / 'P0'               -> '02_Pfinal_'
-%   titulo = 'P_final (semi-acoplado)'      -> '03_Pfinal_semi_'
+%   titulo = 'P_final'                      -> '02_Pfinal_'
+%   titulo = 'P_final (hibrido)'            -> '03_Pfinal_hib_'
+%   titulo = 'P_final (semi-acoplado)'      -> '04_Pfinal_semi_'
 % Padrão: <ordem>_<stage>_<variável>.png
     t = lower(titulo);
     if contains(t, 'p0') || contains(t, 'chute')
         p = '01_P0_';
+    elseif contains(t, 'hibrido') || contains(t, 'híbrido')
+        p = '03_Pfinal_hib_';
     elseif contains(t, 'semi')
-        p = '03_Pfinal_semi_';
+        p = '04_Pfinal_semi_';
     else
         p = '02_Pfinal_';
     end

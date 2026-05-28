@@ -36,6 +36,8 @@ function B = estimate_bias(L, opts)
 
 % Opções default
 default_opts = struct( ...
+    'windows_manual', [],   ...   % Nx2 [t_start, t_end] — se fornecido, IGNORA detecção
+                            ...   %     automática e usa só essas janelas
     'pwm_idle_thr',  1100,  ...   % PWM <= isto = motor idle (drone no chão)
     'gyro_thr',      0.10,  ...   % rad/s — limiar de "calmo" rotacional
     'acc_thr',       0.50,  ...   % m/s² — |accel_norm - g| máximo aceitável
@@ -68,20 +70,48 @@ acc_norm = sqrt(sum(acc.^2, 2));
 
 %% 2. Critérios de "janela calma"
 %
+% Se o usuário passou janelas manuais (windows_manual), USA SÓ ELAS — pula
+% detecção automática. Mais confiável que o detector (que pode pegar
+% hovers contaminados por vibração).
+%
+% Caso contrário:
 %   (a) PRÉ-ARME: PWM máximo dos 4 motores <= pwm_idle_thr
 %   (b) HOVER STEADY: gyro_norm < thr  AND  |acc_norm - g| < acc_thr
-%
-is_idle  = max(pwm, [], 2) <= opts.pwm_idle_thr;
-is_hover = (gyr_norm < opts.gyro_thr) & (abs(acc_norm - opts.g) < opts.acc_thr) & ~is_idle;
-is_calm  = is_idle | is_hover;
 
-%% 3. Encontrar segmentos contínuos com mín duração
-[seg_start, seg_end] = find_segments(is_calm, t, opts.min_duration);
+if ~isempty(opts.windows_manual)
+    if size(opts.windows_manual, 2) ~= 2
+        error('estimate_bias:badManual', ...
+            'windows_manual deve ser Nx2 [t_start, t_end]. Recebeu %dx%d.', ...
+            size(opts.windows_manual));
+    end
+    seg_start = opts.windows_manual(:, 1);
+    seg_end   = opts.windows_manual(:, 2);
+    % Filtrar janelas que estão fora do range do log (avisa)
+    in_range = (seg_start >= t(1)) & (seg_end <= t(end));
+    if any(~in_range)
+        warning('estimate_bias:outOfRange', ...
+            '%d janela(s) manual(is) fora do range [%.1f, %.1f] s — descartada(s).', ...
+            sum(~in_range), t(1), t(end));
+        seg_start = seg_start(in_range); seg_end = seg_end(in_range);
+    end
+    is_idle  = false(size(t));
+    is_hover = false(size(t));
+    if opts.verbose
+        fprintf('estimate_bias: usando %d janela(s) MANUAL(is) (detecção auto desabilitada)\n', ...
+            numel(seg_start));
+    end
+else
+    is_idle  = max(pwm, [], 2) <= opts.pwm_idle_thr;
+    is_hover = (gyr_norm < opts.gyro_thr) & (abs(acc_norm - opts.g) < opts.acc_thr) & ~is_idle;
+    is_calm  = is_idle | is_hover;
+    [seg_start, seg_end] = find_segments(is_calm, t, opts.min_duration);
+end
+
 n_windows = numel(seg_start);
 
 if n_windows == 0
     warning('estimate_bias:noWindow', ...
-        'Nenhuma janela calma detectada com critérios atuais. Relaxe gyro_thr/acc_thr.');
+        'Nenhuma janela calma detectada / fornecida.');
     B = empty_result();
     return;
 end
@@ -115,7 +145,9 @@ for w = 1:n_windows
     accel_per_win(w,:) = median(acc(idx_w, :), 1) - expected_acc';
 
     % Tipo da janela
-    if max(max(pwm(idx_w,:))) <= opts.pwm_idle_thr
+    if ~isempty(opts.windows_manual)
+        typ_per_win(w) = "manual";
+    elseif max(max(pwm(idx_w,:))) <= opts.pwm_idle_thr
         typ_per_win(w) = "idle";
     else
         typ_per_win(w) = "hover";

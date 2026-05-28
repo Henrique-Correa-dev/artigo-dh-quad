@@ -317,7 +317,7 @@ att_rad0 = deg2rad(sg.att(1,:));
 x0_tr = [sg.pqr(1,:)'; att_rad0(:); 0; 0; 0];
 
 try
-    [t_s, x_s] = ode45(@(tt,xx) vtol_dynamics(tt, xx, sg.time, sg.pwm, params_id), ...
+    [t_s, x_s] = ode45(@(tt,xx) vtol_dynamics_legacy(tt, xx, sg.time, sg.pwm, params_id), ...
         sg.time, x0_tr, ode_opts);
     x_tr = interp1(t_s, x_s, sg.time, 'linear', 'extrap');
     tr_ok = true;
@@ -336,7 +336,7 @@ att_rad0_vl = deg2rad(att_vl(1,:));
 x0_vl = [pqr_vl(1,:)'; att_rad0_vl(:); 0; 0; 0];
 
 try
-    [t_sv, x_sv] = ode45(@(tt,xx) vtol_dynamics(tt, xx, time_vl, pwm_vl, params_id), ...
+    [t_sv, x_sv] = ode45(@(tt,xx) vtol_dynamics_legacy(tt, xx, time_vl, pwm_vl, params_id), ...
         time_vl, x0_vl, ode_opts);
     x_vl = interp1(t_sv, x_sv, time_vl, 'linear', 'extrap');
     vl_ok = true;

@@ -22,14 +22,12 @@ paths = setup_paths();
 %  1. CONFIGURACAO (parameters.m centraliza P0 e bench data)
 %  ========================================================================
 
-% ---------- Selecao de parametros ----------
+% ---------- Selecao de parametros (15 elementos — modelo rotacional puro) ----------
 P = [0.063244; 0.250554; 0.116192; 0.001571;   ... % Jx, Jy, Jz, Jxz
      0.55; 0.45; 1.0; 0.75;                    ... % k_T1..k_T4
      0.55; 0.45; 1.0; 0.75;                    ... % k_Q1..k_Q4
-     10; 5; 0.5;                                ... % Dp, Dq, Dr
-     0.7; 1.4; 0.3;                            ... % Bp, Bq, Br
-     0.0; 0.0;                                  ... % dx_cg, dy_cg
-     -4.0; -4.0; -0.1; -0.5];                     % Xu_m, Yv_m, Zw_m, Bz
+     10; 5; 0.5];                                 % Dp, Dq, Dr
+% Removidos: Bp/Bq/Br (CG via Lx/Ly), Xu/Yv/Zw (drag), Bz (vai pra sensor model)
 
 % Descomente para usar parametros identificados:
 %id = load(fullfile(paths.outputs, 'P_identified.mat'));

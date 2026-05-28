@@ -1,0 +1,273 @@
+%VALIDATE_PARAMS  Simula a planta com P_J fornecido em UMA OU MAIS janelas do
+%                 log e gera comparações nos 3 modos (full, hybrid, semi).
+%
+% NÃO RODA OTIMIZAÇÃO — só simula. Útil pra:
+%   - Testar P0 (chute inicial)
+%   - Testar P_final identificado
+%   - Testar mudanças manuais (ex: Jy do slide, Bz=0, etc)
+%   - Comparar parâmetros diferentes lado a lado em VÁRIAS janelas
+%
+% Edite as configurações abaixo e rode:
+%   >> validate_params
+%
+% Outputs: figuras em outputs/images/ com prefixo "VP_<tag>_w<n>_<modo>.png"
+%          + tabela comparativa de R² no console no fim
+
+clear; clc; close all;
+
+addpath(fileparts(fileparts(mfilename('fullpath'))));   % raiz
+setup_paths();
+
+% ╔══════════════════════════════════════════════════════════════════╗
+% ║  CONFIGURAÇÃO — EDITE AQUI                                       ║
+% ╚══════════════════════════════════════════════════════════════════╝
+
+LOG_FILE = 'logs_concat.mat';      % ou um log individual ex: '4 25-05-2026 ...'
+
+% Janelas de validação (em segundos do log) — uma por LINHA da matriz
+% Pode ser 1 janela (1x2) ou várias (Nx2).
+T_WINDOWS = [ ...
+    513,  523;     % janela curta no log 1 (referência)
+    600,  645;     % voo principal log 1 (alto)
+    900,  950;     % janela no log 2 (se LOG_FILE=logs_concat.mat)
+];
+
+% Modos a rodar (true = roda, false = pula)
+RUN_FULL   = true;
+RUN_HYBRID = true;
+RUN_SEMI   = true;
+
+% Fonte de P_J — escolher UMA das opções:
+P_SOURCE = 'manual';        % 'P0' | 'P_final' | 'manual'
+
+% Se P_SOURCE='manual', edita aqui (22 elementos):
+%   [Jx Jy Jz Jxz | k_T1..4 | k_Q1..4 | Dp Dq Dr | Bp Bq Br | Xu Yv Zw Bz]
+P_MANUAL = [0.085; 0.12; 0.174; 0.002; ...   % inércias do slide
+            1; 1; 1; 1; ...                    % k_T = 1
+            1; 1; 1; 1; ...                    % k_Q = 1
+            5; 0.1; 1; ...                 % Dp, Dq, Dr
+            1.6; 3.4; -0.2; ...                       % Bp, Bq, Br
+            -30; 0; -2; 5];               % Xu, Yv, Zw, Bz
+
+
+% Tag pros nomes dos arquivos de saída (curto, pra distinguir testes)
+TAG = 'test1';   % gera "VP_test1_w1_full.png", "VP_test1_w2_full.png", etc.
+
+
+%% ====== Pipeline (não precisa mexer abaixo) ======
+
+% Validação básica
+if size(T_WINDOWS, 2) ~= 2
+    error('T_WINDOWS deve ser Nx2 (cada linha = [t_start, t_end]). Recebeu %dx%d.', size(T_WINDOWS));
+end
+n_wins = size(T_WINDOWS, 1);
+
+% 1. Carrega P_J
+proj = parameters();
+switch lower(P_SOURCE)
+    case 'p0'
+        P_J = proj.P0_J;
+        fprintf('validate_params: usando P0 (chute inicial).\n');
+    case 'p_final'
+        Pdat = load(fullfile(setup_paths().outputs, 'P_identified.mat'));
+        P_J = Pdat.P_final;
+        fprintf('validate_params: usando P_final de P_identified.mat.\n');
+    case 'manual'
+        P_J = P_MANUAL(:);
+        fprintf('validate_params: usando P_MANUAL.\n');
+    otherwise
+        error('P_SOURCE inválido: %s', P_SOURCE);
+end
+if numel(P_J) ~= 22
+    error('P_J deve ter 22 elementos. Recebeu %d.', numel(P_J));
+end
+
+% 2. Carrega log (uma vez, com fallback se concat não existir)
+log_path = fullfile(setup_paths().data, LOG_FILE);
+if ~exist(log_path, 'file')
+    fprintf('⚠ Arquivo "%s" não encontrado.\n', LOG_FILE);
+    fprintf('  Para usá-lo, rode primeiro: >> test_flight\n');
+    fprintf('  Usando log individual como fallback.\n\n');
+    LOG_FILE = '4 25-05-2026 09-31-48.log-132954.mat';
+    log_path = fullfile(setup_paths().data, LOG_FILE);
+end
+L = load_log_data(log_path);
+t_lo = max([min(L.time_IMU), min(L.time_ATT), min(L.time_RCOU)]);
+t_hi = min([max(L.time_IMU), max(L.time_ATT), max(L.time_RCOU)]);
+t_common_full = t_lo:0.1:t_hi;
+t_common_full = t_common_full(:);
+
+% 3. Constants
+constants = struct('m', proj.m, 'g', proj.g, 'tau_motor', proj.tau_motor);
+R2 = @(y_e, y_s) 1 - sum((y_e - y_s).^2) / max(sum((y_e - mean(y_e)).^2), 1e-12);
+
+% Modos
+modes = {};
+if RUN_FULL,   modes{end+1} = 'full';   end
+if RUN_HYBRID, modes{end+1} = 'hybrid'; end
+if RUN_SEMI,   modes{end+1} = 'semi';   end
+
+% Storage de R² por janela / modo / sinal (tabela final)
+sig_names = {'p','q','r','phi','theta','psi','accX','accY','accZ'};
+R2_table = nan(n_wins, numel(modes), numel(sig_names));
+
+img_dir = setup_paths().images;
+if ~exist(img_dir, 'dir'), mkdir(img_dir); end
+
+%% ====== Loop sobre janelas ======
+for w = 1:n_wins
+    t_window = T_WINDOWS(w, :);
+    fprintf('\n############### JANELA %d/%d: [%.1f, %.1f] s ###############\n', ...
+        w, n_wins, t_window(1), t_window(2));
+
+    if t_window(1) < t_lo || t_window(2) > t_hi
+        warning('Janela [%g, %g] fora do log [%.1f, %.1f] — PULANDO', ...
+            t_window(1), t_window(2), t_lo, t_hi);
+        continue;
+    end
+
+    idx = (t_common_full >= t_window(1)) & (t_common_full <= t_window(2));
+    time = t_common_full(idx);
+    N = numel(time);
+
+    pwm      = [interp1(L.time_RCOU, L.pwm1_raw, time, 'linear'), ...
+                interp1(L.time_RCOU, L.pwm2_raw, time, 'linear'), ...
+                interp1(L.time_RCOU, L.pwm3_raw, time, 'linear'), ...
+                interp1(L.time_RCOU, L.pwm4_raw, time, 'linear')];
+    pqr_meas = [interp1(L.time_IMU, L.gyrX_raw, time, 'linear'), ...
+                interp1(L.time_IMU, L.gyrY_raw, time, 'linear'), ...
+                interp1(L.time_IMU, L.gyrZ_raw, time, 'linear')];
+    acc_meas = [interp1(L.time_IMU, L.accX_raw, time, 'linear'), ...
+                interp1(L.time_IMU, L.accY_raw, time, 'linear'), ...
+                interp1(L.time_IMU, L.accZ_raw, time, 'linear')];
+    att_meas = [interp1(L.time_ATT, L.roll_deg,  time, 'linear'), ...
+                interp1(L.time_ATT, L.pitch_deg, time, 'linear'), ...
+                interp1(L.time_ATT, L.yaw_deg,   time, 'linear')];
+
+    fprintf('  (%d amostras, dt=%.3f s)\n', N, time(2)-time(1));
+
+    % Roda os modos
+    results = struct();
+    for k = 1:numel(modes)
+        mode = modes{k};
+        fprintf('\n  ===== modo: %s =====\n', mode);
+        tic;
+        results.(mode) = sim_window(mode, P_J, time, pwm, pqr_meas, att_meas, constants);
+        fprintf('    Tempo sim: %.2f s\n', toc);
+
+        r = results.(mode);
+        all_meas = {pqr_meas(:,1), pqr_meas(:,2), pqr_meas(:,3), ...
+                    att_meas(:,1), att_meas(:,2), att_meas(:,3), ...
+                    acc_meas(:,1), acc_meas(:,2), acc_meas(:,3)};
+        all_sim  = {r.p, r.q, r.r, r.phi, r.theta, r.psi, r.accX, r.accY, r.accZ};
+        for s = 1:9
+            R2_table(w, k, s) = R2(all_meas{s}, all_sim{s});
+        end
+        fprintf('    R² p=%+.3f q=%+.3f r=%+.3f | phi=%+.3f theta=%+.3f psi=%+.3f | aX=%+.3f aY=%+.3f aZ=%+.3f\n', ...
+            R2_table(w,k,1), R2_table(w,k,2), R2_table(w,k,3), ...
+            R2_table(w,k,4), R2_table(w,k,5), R2_table(w,k,6), ...
+            R2_table(w,k,7), R2_table(w,k,8), R2_table(w,k,9));
+    end
+
+    % Plots por modo (3x3)
+    for k = 1:numel(modes)
+        mode = modes{k};
+        r = results.(mode);
+        plot_compare_3x3(time, mode, TAG, w, t_window, ...
+            pqr_meas, att_meas, acc_meas, ...
+            r.p, r.q, r.r, r.phi, r.theta, r.psi, r.accX, r.accY, r.accZ, ...
+            img_dir);
+    end
+
+    % Overlay dos modos
+    if numel(modes) > 1
+        plot_modes_overlay(time, modes, results, pqr_meas, att_meas, acc_meas, ...
+            TAG, w, t_window, img_dir);
+    end
+end
+
+%% ====== Tabela comparativa final ======
+fprintf('\n\n');
+fprintf('═══════════════════════════════════════════════════════════════════\n');
+fprintf('  TABELA COMPARATIVA DE R² — todas as janelas / modos / sinais\n');
+fprintf('═══════════════════════════════════════════════════════════════════\n');
+for s = 1:numel(sig_names)
+    fprintf('\n  %s:\n', sig_names{s});
+    fprintf('    %-12s', 'janela');
+    for k = 1:numel(modes), fprintf(' %10s', modes{k}); end
+    fprintf('\n');
+    for w = 1:n_wins
+        fprintf('    [%4.0f,%4.0f] ', T_WINDOWS(w,1), T_WINDOWS(w,2));
+        for k = 1:numel(modes)
+            fprintf(' %+10.3f', R2_table(w, k, s));
+        end
+        fprintf('\n');
+    end
+end
+fprintf('\n═══════════════════════════════════════════════════════════════════\n');
+fprintf('Figuras salvas em: %s\n', img_dir);
+fprintf('  VP_%s_w<n>_<mode>.png   (uma por janela × modo)\n', TAG);
+if numel(modes) > 1
+    fprintf('  VP_%s_w<n>_overlay.png (overlay dos modos por janela)\n', TAG);
+end
+
+
+%% ====== Plot helpers ======
+
+function plot_compare_3x3(time, mode, tag, w_idx, t_win, ...
+    pqr_m, att_m, acc_m, ...
+    p_s, q_s, r_s, phi_s, theta_s, psi_s, accX_s, accY_s, accZ_s, img_dir)
+
+    fig = figure('Position', [80 50 1500 900], 'Color', 'w', 'Visible', 'off');
+    labels = {'p','q','r','phi','theta','psi','accX','accY','accZ'};
+    units  = {'rad/s','rad/s','rad/s','deg','deg','deg','m/s²','m/s²','m/s²'};
+    meas = {pqr_m(:,1), pqr_m(:,2), pqr_m(:,3), ...
+            att_m(:,1), att_m(:,2), att_m(:,3), ...
+            acc_m(:,1), acc_m(:,2), acc_m(:,3)};
+    sim  = {p_s, q_s, r_s, phi_s, theta_s, psi_s, accX_s, accY_s, accZ_s};
+    for k = 1:9
+        subplot(3,3,k); hold on; grid on;
+        plot(time, meas{k}, 'b-', 'LineWidth', 1.0, 'DisplayName', 'medido');
+        plot(time, sim{k},  'r--','LineWidth', 1.3, 'DisplayName', 'sim');
+        title(labels{k}, 'FontWeight', 'bold');
+        xlabel('t [s]'); ylabel(units{k});
+        if k == 1, legend('Location','best'); end
+    end
+    sgtitle(sprintf('validate\\_params — modo %s — w%d [%g, %g]s — tag %s', ...
+        mode, w_idx, t_win(1), t_win(2), tag));
+    saveas(fig, fullfile(img_dir, sprintf('VP_%s_w%d_%s.png', tag, w_idx, mode)));
+    close(fig);
+end
+
+
+function plot_modes_overlay(time, modes, results, pqr_m, att_m, acc_m, ...
+    tag, w_idx, t_win, img_dir)
+    fig = figure('Position', [80 50 1500 900], 'Color', 'w', 'Visible', 'off');
+    labels = {'p','q','r','phi','theta','psi','accX','accY','accZ'};
+    units  = {'rad/s','rad/s','rad/s','deg','deg','deg','m/s²','m/s²','m/s²'};
+    sigs_meas = {pqr_m(:,1), pqr_m(:,2), pqr_m(:,3), ...
+                 att_m(:,1), att_m(:,2), att_m(:,3), ...
+                 acc_m(:,1), acc_m(:,2), acc_m(:,3)};
+    sig_names = {'p','q','r','phi','theta','psi','accX','accY','accZ'};
+
+    color_map = containers.Map({'full','hybrid','semi'}, ...
+                               {'r--','m-.','b:'});
+
+    for k = 1:9
+        subplot(3,3,k); hold on; grid on;
+        plot(time, sigs_meas{k}, 'Color', [0 0.7 0.3], 'LineWidth', 1.2, 'DisplayName', 'medido');
+        for m = 1:numel(modes)
+            r = results.(modes{m});
+            sn = sig_names{k};
+            plot(time, r.(sn), color_map(modes{m}), 'LineWidth', 1.2, ...
+                 'DisplayName', modes{m});
+        end
+        title(labels{k}, 'FontWeight','bold');
+        xlabel('t [s]'); ylabel(units{k});
+        if k == 1, legend('Location','best'); end
+    end
+    sgtitle(sprintf('validate\\_params — overlay — w%d [%g, %g]s — tag %s', ...
+        w_idx, t_win(1), t_win(2), tag));
+    saveas(fig, fullfile(img_dir, sprintf('VP_%s_w%d_overlay.png', tag, w_idx)));
+    close(fig);
+end

@@ -41,7 +41,7 @@ fprintf('  CI: p=%.3f q=%.3f r=%.3f phi=%.1f° theta=%.1f° psi=%.1f°\n', ...
 
 %% Integrar
 idx_sim = (t>=t0) & (t<=tf);
-[t_sim, x_sim] = ode45(@(tt,xx) vtol_dynamics(tt,xx,t,pwm,params), t(idx_sim), x0);
+[t_sim, x_sim] = ode45(@(tt,xx) vtol_dynamics_legacy(tt,xx,t,pwm,params), t(idx_sim), x0);
 
 fprintf('  %d passos do ode45\n', length(t_sim));
 fprintf('  Estados finais:\n');
