@@ -1,0 +1,52 @@
+% Folha de Rosto e Capa para o caso do TG
+\maketitle
+
+% Dedicatoria: Nao esqueca essa secao  ... :-)
+\begin{itadedication}
+Aos amigos da Graduação e Pós-Graduação do ITA, minha família e minha esposa, que me acompanharam nessa jornada, me motivarem e me apoiarem neste trabalho.
+\end{itadedication}
+
+% Agradecimentos
+\begin{itathanks}
+\input{PreTextuais/agradecimentos}
+\end{itathanks}
+
+% Epígrafe
+\ifhyperref\pdfbookmark[0]{\nameepigraphe}{epigrafe}\fi
+\begin{flushright}
+\begin{spacing}{1}
+\mbox{}\vfill
+\input{PreTextuais/epigrafe}
+\end{spacing}
+\end{flushright}
+
+% Resumo
+\begin{abstract}
+\noindent
+\input{PreTextuais/resumo}
+\end{abstract}
+
+% Abstract
+\begin{englishabstract}
+\noindent
+\input{PreTextuais/abstract}
+\end{englishabstract}
+
+% Lista de figuras
+\listoffigures %opcional
+
+% Lista de tabelas
+\listoftables %opcional
+
+% Lista de abreviaturas
+% Inclui as siglas que aparecem no texto sem \gls{} (aqui, ja com conteudo na pagina, nao gera pagina em branco)
+\glsadd{PWM}\glsadd{RPM}\glsadd{M4V}\glsadd{PID}\glsadd{CAD}\glsadd{IMU}\glsadd{TIC}\glsadd{CG}\glsadd{EKF}%
+\glsadd{MSE}\glsadd{PD}\glsadd{PI}\glsadd{SISO}\glsadd{SNR}\glsadd{DC}\glsadd{DOF}\glsadd{MAD}
+\listofabbreviations
+    
+% Lista de simbolos
+\addsymbolstolist   % popula a Lista de Símbolos (definido em listasimbolos.tex)
+\listofsymbols
+
+% Sumario
+\tableofcontents

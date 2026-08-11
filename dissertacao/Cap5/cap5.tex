@@ -1,0 +1,237 @@
+Os resultados apresentados neste capítulo decorrem diretamente da campanha de voo descrita na Seção~\ref{sec:campanha}. O produto dessa campanha foi o conjunto de dados de voo que serve de base a toda a análise que se segue. A partir desses dados, obtém-se o modelo identificado da aeronave, que é então linearizado em torno do voo pairado e empregado em um projeto de controle. O objetivo final é observar os limites da representação do modelo linear frente ao modelo não linear quando ambos são inseridos em malha fechada.
+
+Para isso, o capítulo segue a ordem preconizada pela metodologia M4V. Primeiro, valida-se a coerência dos dados de entrada, confrontando as manobras planejadas com as efetivamente realizadas em voo. Em seguida, realiza-se a identificação do modelo por meio do método OEM. Por fim, projeta-se o controle e compara-se a resposta do modelo linear com a do modelo não linear, evidenciando até onde a aproximação linear permanece representativa.
+
+\section{Verificação da Coerência de Dados de Entrada}
+
+Os critérios objetivos estabelecidos para a definição das manobras são, nesta seção, confrontados com as manobras efetivamente realizadas em voo, verificando-se a coerência dos dados de entrada antes da estimação. A análise percorre o registro de voo completo, compondo as velocidades angulares medidas ($p,q,r$) que constituem a resposta, enquanto os momentos de controle ($\tau_x,\tau_y,\tau_z$), a entrada efetiva do estimador, são reconstruídos dos comandos de PWM pela mesma alocação empregada no modelo de identificação. A Figura~\ref{fig:exc_overview} apresenta a cadeia completa de sinais ao longo do voo, desde o comando do piloto (RCIN), os PWM dos motores (RCOU), os momentos gerados, até as velocidades angulares de resposta.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/excitacao_overview.png}
+    \caption{Cadeia de sinais da excitação ao longo do voo: comando do piloto (RCIN), PWM dos motores (RCOU), momentos gerados ($\tau_x,\tau_y,\tau_z$) e taxas angulares de resposta ($p,q,r$).}
+    \label{fig:exc_overview}
+\end{figure}
+
+A verificação inicia-se pelo critério de \emph{entrada}: o conteúdo de frequência da excitação. Uma boa manobra concentra sua energia na banda da dinâmica do canal-alvo, em torno da frequência característica $\omega_n$, segundo a relação $\Delta t \approx 2{,}3/\omega_n$ (Equação~\ref{eq:doublet-dt}), e apresenta energia praticamente nula em frequência zero. A Figura~\ref{fig:exc_doublet} isola um doublet representativo de cada eixo, no tempo (momento $\tau$ aplicado e taxa de resposta) e em frequência (densidade espectral do momento). Em rolagem e arfagem, o doublet é nítido e simétrico, com largura de pulso $\Delta t \approx 0{,}4$~s e energia concentrada próximo de $1$~Hz, dentro da banda da dinâmica de taxa e desprezível em frequência nula, atendendo ao critério. A guinada evidencia a limitação do canal, pois, por ter baixa amplitude de controle e resposta lenta, não foi possível comandar um doublet rápido, a excitação resultante é cerca de cinco vezes mais lenta ($\Delta t \approx 2{,}0$~s) e de menor amplitude, com energia concentrada em apenas $0{,}23$~Hz. A Tabela~\ref{tab:freq} resume esses valores.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/excitacao_doublet.png}
+    \caption{Doublet isolado de cada eixo (de cima para baixo: rolagem, arfagem e guinada). À esquerda, no tempo: momento de controle $\tau$ (azul, eixo esquerdo) e taxa angular de resposta (laranja tracejado, eixo direito). À direita, a densidade espectral de potência do momento, com o pico de energia e a banda útil ($\approx 1{:}3$, faixa verde) destacados.}
+    \label{fig:exc_doublet}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Critério de entrada (conteúdo de frequência) por eixo, avaliado no doublet isolado da Figura~\ref{fig:exc_doublet}.}
+\label{tab:freq}
+\begin{tabular}{lccc}
+\toprule
+Eixo (segmento) & $\sigma_\tau$ [N$\cdot$m] & $\Delta t$ [s] & $f_{\text{pico}}$ [Hz] \\
+\midrule
+Rolagem ($40$--$80$~s)  & 0,52 & 0,40 & 1,19 \\
+Arfagem ($80$--$125$~s) & 0,71 & 0,40 & 0,90 \\
+Guinada ($0$--$40$~s)   & 0,07 & 2,00 & 0,23 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A relação sinal--ruído e o isolamento, por sua vez, foram avaliados em janelas deslizantes de $20$~s, com passo de $10$~s, ao longo de todo o voo, conforme a Figura~\ref{fig:exc_snr}. Em cada eixo, as janelas correspondentes ao segmento de manobra dedicado (faixa verde) destacam-se das demais, reunindo simultaneamente a maior relação sinal-ruído e o maior isolamento, evidência direta de que a excitação foi concentrada no eixo e no instante planejados.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1\textwidth]{Cap5/excitacao_snr.png}
+    \caption{Relação sinal--ruído (Equação~\ref{eq:snr}; barras azuis, eixo esquerdo) e isolamento $\rho$ (Equação~\ref{eq:isolamento}; barras laranja, eixo direito)}
+    \label{fig:exc_snr}
+\end{figure}
+
+Restringindo a análise aos três segmentos efetivamente empregados na estimação, guinada ($0$--$40$~s), rolagem ($40$--$80$~s) e arfagem ($80$--$125$~s), a Tabela~\ref{tab:manobras} resume os critérios de \emph{resposta}, relação sinal--ruído e isolamento, em cada segmento.
+
+Nota-se que $\tau_x$ e $\tau_y$ resultam de diferenças de empuxo multiplicadas pelos braços, ao passo que $\tau_z$ resulta apenas das diferenças de torque de reação dos rotores; por isso a guinada é o canal com maior dificuldade de variar a manobra.
+
+\begin{table}[ht]
+\centering
+\caption{Critérios de resposta (relação sinal--ruído e isolamento) por segmento de manobra.}
+\label{tab:manobras}
+\begin{tabular}{lccc}
+\toprule
+Eixo (segmento) & $\sigma_{\text{taxa}}$ [rad/s] & Isolamento $\rho$ & SNR \\
+\midrule
+Rolagem ($40$--$80$~s)  & 0,75 & 3,2 & 62 \\
+Arfagem ($80$--$125$~s) & 0,67 & 6,2 & 60 \\
+Guinada ($0$--$40$~s)   & 0,31 & 1,7 & 142 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Todos os eixos superam com folga o critério de relação sinal-ruído ($\text{SNR} \geq 3$), e os doublets de rolagem e arfagem apresentam forte isolamento ($\rho = 3{,}2$ e $6{,}2$) e frequência de pico próxima de $1$~Hz, na banda da dinâmica de taxa. A guinada, por sua vez, é o canal de menor autoridade de controle: $\tau_z$ provém apenas do torque de reação dos rotores (Equação~\ref{eq:tau_z}), cerca de cinco vezes menor que os momentos de rolagem e arfagem. Em consequência, é o eixo de menor isolamento ($\rho = 1{,}7$) e de pior observabilidade, pois, a inércia $J_z$ possui o valor mais elevado de todos os eixos, devido o acúmulo da densidade da aeronave no plano XY, razão pela qual esse parâmetro é possui os piores valores nas análises. Esses resultados confirmam que as manobras realizadas atendem aos critérios estabelecidos, sustentando a qualidade da identificação apresentada nas seções seguintes.
+
+\section{Identificação do Modelo Não Linear através de OEM}
+
+Aplicada a metodologia EEM--OEM descrita no capítulo anterior às janelas de treino selecionadas, esta seção apresenta a identificação dos parâmetros do modelo não linear. Parte-se do modelo inicial $\Theta_{\text{0}}$, construído com as inércias de projeto (CAD), os coeficientes de motor de bancada e estimativas iniciais de arrasto angular (Tabela~\ref{tab:p0}); em seguida, o EEM fornece uma estimativa algébrica $\Theta_{\text{EEM}}$, refinada pelo OEM progressivo até o conjunto final $\Theta_{\text{OEM}}$.
+
+A Figura~\ref{fig:sim-p0} apresenta a resposta simulada do modelo inicial $\Theta_0$ sobreposta às medições de $p,q,r$ e $a_x,a_y,a_z$. O modelo de partida já reproduz a forma geral da resposta, mas com erros de amplitude e de amortecimento, evidenciando a necessidade da estimação.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Cap5/id_sim_p0.png}
+    \caption{Resposta simulada do modelo inicial $\Theta_0$ frente às medições.}
+    \label{fig:sim-p0}
+\end{figure}
+
+A Tabela~\ref{tab:params-comp} compara os parâmetros nas três etapas. O EEM fornece um ponto de partida algébrico, porém enviesado, onde subestima os coeficientes de empuxo, reflexo da atenuação de amplitude introduzida pela diferenciação numérica das taxas.
+
+\begin{table}[ht]
+    \centering
+    \caption{Comparação dos parâmetros e desvio-padrão relativo de Cramér-Rao (CR\%) dos modelos $\Theta_0$, $\Theta_{\text{EEM}}$ e $\Theta_{\text{OEM}}$. Os valores de $c_T$ estão em $10^{-7}$~N/RPM$^2$ e os de $c_M$ em $10^{-9}$~N$\cdot$m/RPM$^2$.}
+    \label{tab:params-comp}
+    \begin{tabular}{l cc cc cc}
+    \toprule
+    & \multicolumn{2}{c}{$\Theta_0$} & \multicolumn{2}{c}{$\Theta_{\text{EEM}}$} & \multicolumn{2}{c}{$\Theta_{\text{OEM}}$} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+    Parâmetro & valor & CR\% & valor & CR\% & valor & CR\% \\
+    \midrule
+    $J_x$    & 0,0432  & 1,9   & 0,0526  & 6,2   & 0,0469  & 1,8 \\
+    $J_y$    & 0,0844  & 1,7   & 0,0804  & 4,8   & 0,0984  & 1,7 \\
+    $J_z$    & 0,1262  & 19,3  & 0,1131  & 37,0  & 0,1453  & 19,2 \\
+    $J_{xz}$ & 0,00157 & 70,3 & 0,00047 & 83,2 & 0,00261 & 30,4 \\
+    ${c_T}_1$ & 1,76 & 1,2  & 0,89 & 3,4 & 1,87 & 1,1 \\
+    ${c_T}_2$ & 1,76 & 1,2  & 0,88 & 3,5 & 1,86 & 1,1 \\
+    ${c_T}_3$ & 1,76 & 1,3  & 0,86 & 4,0 & 1,86 & 1,3 \\
+    ${c_T}_4$ & 1,76 & 1,2  & 0,88 & 3,7 & 1,89 & 1,2 \\
+    ${c_M}_1$ & 5,04 & 47,4 & 3,33 & 34,8 & 3,38 & 26,1 \\
+    ${c_M}_2$ & 5,04 & 54,7 & 2,62 & 34,0 & 3,16 & 25,5 \\
+    ${c_M}_3$ & 5,04 & 42,9 & 4,28 & 39,2 & 3,92 & 29,5 \\
+    ${c_M}_4$ & 5,04 & 48,1 & 2,48 & 36,5 & 3,47 & 27,3 \\
+    $c_p$    & 0,5 & 32,9 & 1,63 & 13,8 & 6,85 & 2,3 \\
+    $c_q$    & 0,5 & 22,5 & 1,50 & 11,6 & 4,68 & 2,2 \\
+    $c_r$    & 0,5 & 7,7  & 0,58 & 8,8  & 0,81 & 3,6 \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+    \centering
+    \subfloat[Velocidades angulares.]{%
+        \includegraphics[width=0.49\textwidth]{Cap5/id_comp_rates.png}%
+        \label{fig:sim-comp-rates}}
+    \hfill
+    \subfloat[Forças específicas (acelerômetro).]{%
+        \includegraphics[width=0.49\textwidth]{Cap5/id_comp_acc.png}%
+        \label{fig:sim-comp-acc}}
+    \caption{Comparação das respostas de $\Theta_0$, $\Theta_{\text{EEM}}$ e $\Theta_{\text{OEM}}$ frente às medições: (a) velocidades angulares e (b) forças específicas.}
+    \label{fig:sim-comp}
+\end{figure}
+
+O OEM corrige esse viés, elevando ${c_T}_i$ a $\approx 1{,}87\times10^{-7}$; as inércias $J_x$ e $J_y$ sobem de $8$ a $11\%$ frente ao CAD; os coeficientes de contra-torque ${c_M}_i$ caem cerca de $30\%$, refletindo a sobrestimação da bancada em voo; e os arrastos angulares ajustam-se a valores fisicamente coerentes, com $c_r$ (guinada) o menor de todos, consistente com a baixa autoridade desse eixo. A análise de qualidade (Cramér--Rao) corrobora a discussão de identificabilidade: $J_x$, $J_y$, ${c_T}_i$ e os arrastos apresentam desvio relativo abaixo de $4\%$, ao passo que os ${c_M}_i$ e $J_{xz}$ ultrapassam $20\%$ (Limite de Cramér--Rao), a qual resulta na guinada como canal de pior observabilidade.
+
+Os três estágios progressivos do OEM ($T_w = 1$, $2$ e $3$~s) convergiram para parâmetros praticamente idênticos, com coeficiente de determinação médio de validação em $p$,$q$ e $r$ de $0{,}720$, $0{,}723$ e $0{,}721$, respectivamente; adotou-se o estágio de $2$~s, de melhor desempenho, considerando as forças específicas o $R^2$ médio fica em $0{,}56$, superior aos $-4{,}19$ do modelo inicial.
+
+Por fim, a Figura~\ref{fig:sim-comp} sobrepõe as respostas do modelo inicial $\Theta_0$, da estimativa do EEM e do OEM final às medições. A melhora é progressiva: o $\Theta_0$ diverge nas taxas (sobretudo em $p$), o EEM já acompanha a forma geral, e o OEM final adere às medições, com $R^2$ de $0{,}66$, $0{,}67$ e $0{,}84$ em $p$, $q$ e $r$. No acelerômetro, a resposta de $a_z$ do EEM destaca-se por subestimar o empuxo (reflexo do $c_T$ enviesado), corrigida pelo OEM, resultando em um.
+
+\section{Validação do Modelo Identificado}
+
+O modelo identificado é validado no segmento de $605$ a $625$~s, rico em movimento composto e não utilizado na estimação, simulando a resposta a partir dos comandos PWM registrados e confrontando-a com as medições de $p,q,r$,$a_x$,$a_y$ e $a_z$. A simulação integra o subsistema de taxa com o modelo de motor físico (idêntico ao do estimador). Aplicam-se as métricas definidas no capítulo anterior: o coeficiente de determinação $R^2$ (Equação~\eqref{eq:r2}), o coeficiente de Theil TIC (Equação~\eqref{eq:tic}) e a decomposição de Theil em viés, variância e covariância (Equação~\eqref{eq:theil}). Comparam-se o modelo inicial $\Theta_0$ (Tabela~\ref{tab:val-p0}), sendo a coluna \textit{(at.?)} referente a um indicador se atendeu ao critério, e o resultado final do OEM (Tabela~\ref{tab:val-oem}).
+
+A comparação evidencia o ganho da identificação. O modelo inicial $\Theta_0$ não reproduz a dinâmica de taxa: o $R^2$ é fortemente negativo em $p$, $q$ e $r$ e o TIC é elevado, com o erro de $p$ dominado pela parcela de viés ($U^b = 0{,}75$) sem os parâmetros estimados, a integração diverge. Apenas $a_z$ ($R^2 = 0{,}82$) é razoável, pois $\Theta_0$ já parte do empuxo nominal de bancada.
+
+\begin{table}[ht]
+    \centering
+    \caption{Validação do modelo inicial $\Theta_0$}
+    \label{tab:val-p0}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l cc cc cc cc cc}
+    \toprule
+     & \multicolumn{2}{c}{$R^2$} & \multicolumn{2}{c}{TIC} & \multicolumn{2}{c}{$U^b$} & \multicolumn{2}{c}{$U^v$} & \multicolumn{2}{c}{$U^c$} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}
+    Canal & valor & at.? & valor & at.? & valor & at.? & valor & at.? & valor & at.? \\
+    \midrule
+    $p$   & $-21{,}2$ & $\times$ & 0,80 & $\times$ & 0,75 & $\times$ & 0,13 & \checkmark & 0,12 & $\times$ \\
+    $q$   & $-0{,}86$ & $\times$ & 0,46 & $\times$ & 0,05 & \checkmark & 0,47 & $\times$ & 0,47 & $\times$ \\
+    $r$   & $-3{,}06$ & $\times$ & 0,66 & $\times$ & 0,05 & \checkmark & 0,25 & \checkmark & 0,70 & \checkmark \\
+    $a_x$ & 0,02 & $\times$ & 0,28 & \checkmark & 0,12 & $\times$ & 0,01 & \checkmark & 0,87 & \checkmark \\
+    $a_y$ & $-1{,}07$ & $\times$ & 0,50 & $\times$ & 0,03 & \checkmark & 0,05 & \checkmark & 0,92 & \checkmark \\
+    $a_z$ & 0,82 & \checkmark & 0,02 & \checkmark & 0,01 & \checkmark & 0,17 & \checkmark & 0,83 & \checkmark \\
+    \bottomrule
+    \end{tabular*}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Validação do modelo final do OEM.}
+    \label{tab:val-oem}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l cc cc cc cc cc}
+    \toprule
+     & \multicolumn{2}{c}{$R^2$} & \multicolumn{2}{c}{TIC} & \multicolumn{2}{c}{$U^b$} & \multicolumn{2}{c}{$U^v$} & \multicolumn{2}{c}{$U^c$} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}
+    Canal & valor & at.? & valor & at.? & valor & at.? & valor & at.? & valor & at.? \\
+    \midrule
+    $p$   & 0,66 & \checkmark & 0,30 & \checkmark & 0,07 & \checkmark & 0,02 & \checkmark & 0,92 & \checkmark \\
+    $q$   & 0,67 & \checkmark & 0,29 & \checkmark & 0,01 & \checkmark & 0,01 & \checkmark & 0,98 & \checkmark \\
+    $r$   & 0,84 & \checkmark & 0,20 & \checkmark & 0,01 & \checkmark & 0,19 & \checkmark & 0,80 & \checkmark \\
+    $a_x$ & 0,40 & $\times$ & 0,27 & \checkmark & 0,01 & \checkmark & 0,52 & $\times$ & 0,47 & $\times$ \\
+    $a_y$ & 0,33 & $\times$ & 0,34 & $\times$ & 0,00 & \checkmark & 0,76 & $\times$ & 0,24 & $\times$ \\
+    $a_z$ & 0,50 & \checkmark & 0,04 & \checkmark & 0,44 & $\times$ & 0,10 & \checkmark & 0,46 & $\times$ \\
+    \bottomrule
+    \end{tabular*}
+\end{table}
+
+O modelo do OEM, por outro lado, reproduz bem as taxas: $R^2$ de $0{,}66$, $0{,}67$ e $0{,}84$ em $p$, $q$ e $r$, com TIC entre $0{,}20$ e $0{,}30$ (dentro do limite de bom ajuste) e o erro residual concentrado na parcela de \emph{covariância} ($U^c$ de $0{,}80$ a $0{,}98$). Esse predomínio da covariância indica que o resíduo é essencialmente aleatório sem viés sistemático nem erro de amplitude, ou seja, a dinâmica rotacional foi corretamente capturada e o que resta é ruído de medição. A guinada, embora apresente o maior $R^2$, ainda exibe alguma discrepância de amplitude ($U^v = 0{,}19$), coerente com a baixa observabilidade do canal. O acelerômetro é reproduzido de forma moderada ($R^2$ de $0{,}33$ a $0{,}50$): em $a_z$ persiste um viés ($U^b = 0{,}44$) associado ao patamar de empuxo no voo pairado, e em $a_x,a_y$ predomina a parcela de variância, refletindo os limites do modelo de sensor para as forças específicas laterais.
+
+\input{Cap4/cap4}
+
+\section{Comparação do Controle no Modelo Linear e Não Linear}
+
+A arquitetura de controle projetada nas seções anteriores sobre o modelo linearizado é agora confrontada com a planta não linear de corpo rígido do Capítulo~2, para mapear até onde a linearização em torno do voo pairado permanece válida. Em ambos os casos aplica-se a \emph{mesma} lei de controle em cascata e a \emph{mesma} cadeia de atuação, alocação nos quatro motores, saturação de PWM em $[\,1200,\ 2000\,]\ \mu$s e curva real do motor, de modo que a única diferença entre as respostas é a planta: linear, $\dot{\mathbf{x}}=A\mathbf{x}+B(\mathbf{u}-\mathbf{u}_0)$, ou não linear, integrando as equações completas de corpo rígido e a posição inercial.
+
+Duas não linearidades, desprezadas na linearização de voo pairado, ganham peso à medida que a manobra se afasta dessa condição:
+\begin{itemize}
+    \item o \textbf{acoplamento giroscópico} $-\Gamma_2\,q\,r$ da Equação~\eqref{eq:p_dot}, que gera um torque de \emph{rolagem} sempre que as taxas de arfagem ($q$) e de guinada ($r$) ocorrem simultaneamente, termo que o modelo linear, com os eixos desacoplados, ignora (prevê $\phi\equiv 0$);
+    \item a \textbf{inclinação do vetor de empuxo}: ao arfar um ângulo $\theta$, a componente vertical do empuxo cai com $\cos\theta$, fazendo a altitude afundar; o modelo linear, que trata o empuxo como puramente vertical, não captura esse acoplamento.
+\end{itemize}
+
+Para evidenciar a transição, simula-se uma manobra combinada, um pulso de velocidade de avanço (que gera arfagem $q$) sobreposto a um giro contínuo de guinada (que sustenta $r$), em três níveis de agressividade, escalados por um único fator que cresce de $S_1$ a $S_3$. A Tabela~\ref{tab:ctrl-cmp} resume os desvios máximos entre as duas plantas, e as Figuras~\ref{fig:ctrl-s1} a~\ref{fig:ctrl-s3} mostram, para cada cenário, as saídas (altitude, velocidade, guinada e rolagem) com seus \emph{setpoints} e as entradas de controle (momentos e PWM).
+
+\begin{table}[ht]
+\centering
+\caption{Desvio máximo entre as plantas linear e não linear sob o mesmo controlador, nos três níveis de manobra.}
+\label{tab:ctrl-cmp}
+\begin{tabular}{l c c c c c}
+\toprule
+Cenário & $u_{amp}$ [m/s] & spin [°/s] & máx$|\Delta h|$ [m] & máx$|\Delta u|$ [m/s] & máx$|\Delta\phi|$ [°] \\
+\midrule
+$S_1$ (suave) & 1,2 & 12 & 0,15 & 0,10 & 0,9  \\
+$S_2$ (média) & 2,8 & 28 & 0,56 & 1,08 & 3,9  \\
+$S_3$ (forte) & 4,5 & 45 & 1,55 & 11,1 & 17,9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No cenário suave $S_1$ (Figura~\ref{fig:ctrl-s1}), as duas plantas são praticamente indistinguíveis: a altitude segue os $3$\,m com afundamento de apenas $0{,}15$\,m, a velocidade e a guinada se sobrepõem e a rolagem permanece em torno de zero ($0{,}9^\circ$). Dentro do envelope de voo pairado, portanto, o modelo linear reproduz fielmente a planta real, o que valida o controlador projetado sobre ele.
+
+No cenário médio $S_2$ (Figura~\ref{fig:ctrl-s2}), a divergência torna-se visível, mas permanece limitada e controlada: a altitude do modelo não linear afunda até cerca de $2{,}5$\,m durante o avanço ($\Delta h = 0{,}56$\,m), enquanto a linear se mantém nivelada; a rolagem do não linear oscila $\pm 4^\circ$ em resposta ao termo $-\Gamma_2\,q\,r$, ausente no linear. Ainda assim, ambos seguem as referências de velocidade e guinada, e o controlador mantém o voo bem comportado nas duas plantas.
+
+No cenário forte $S_3$ (Figura~\ref{fig:ctrl-s3}), as duas previsões descolam por completo. O modelo linear prevê uma resposta benigna, altitude nivelada, rolagem nula, mas, na planta real, a inclinação do empuxo faz a altitude afundar mais de $1{,}5$\,m (de $3$ para $1{,}45$\,m) e o acoplamento giroscópico leva a rolagem a $-18^\circ$, ainda crescendo, com a velocidade de avanço divergindo (desvio superior a $11$\,m/s). Esse cenário opera próximo do limite de estabilidade do controlador na planta não linear, em torno de $50^\circ$/s de guinada combinada com a arfagem, o controlador projetado no modelo desacoplado já não consegue regular a rolagem, limite que o próprio modelo linear, por construção, não consegue prever.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/sim_ctrl_s1_igual.png}
+    \caption{Cenário $S_1$ (manobra suave): controlador no modelo linear (cinza) e não linear (azul) com os \emph{setpoints} (tracejado). As respostas coincidem.}
+    \label{fig:ctrl-s1}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/sim_ctrl_s2_pouco.png}
+    \caption{Cenário $S_2$ (manobra média): divergência pequena e controlada, a altitude do não linear afunda e surge rolagem por acoplamento giroscópico, ausente no linear.}
+    \label{fig:ctrl-s2}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/sim_ctrl_s3_muito.png}
+    \caption{Cenário $S_3$ (manobra forte): as plantas descolam, o não linear afunda mais de $1{,}5$\,m em altitude e atinge $-18^\circ$ de rolagem, enquanto o linear prevê resposta estável.}
+    \label{fig:ctrl-s3}
+\end{figure}
+
+Em conjunto, os três cenários delimitam a faixa de validade do modelo linear para fins de controle: excelente para manobras dentro do envelope de voo pairado ($S_1$), adequado com ressalvas para manobras moderadas ($S_2$) e inadequado para manobras agressivas e acopladas ($S_3$), nas quais os termos giroscópicos e a inclinação do empuxo, desprezados na linearização, dominam a resposta. O resultado justifica o uso do modelo não linear identificado como banco de provas final do controlador, antes do voo real.

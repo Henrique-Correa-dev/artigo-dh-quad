@@ -1,0 +1,9 @@
+{
+  // Mantem o PDF e os arquivos auxiliares (.aux, .bbl, .log, .synctex.gz...)
+  // dentro de uma pasta output/, deixando a pasta da tese limpa.
+  // Combina com a logica do Makefile que ja vem no template.
+  "latex-workshop.latex.outDir": "%DIR%/output",
+
+  // Visualizador de PDF interno, em aba do Cursor (Cmd+Alt+V).
+  "latex-workshop.view.pdf.viewer": "tab"
+}
