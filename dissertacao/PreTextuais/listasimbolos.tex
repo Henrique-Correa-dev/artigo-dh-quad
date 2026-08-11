@@ -1,0 +1,93 @@
+%%%%%%%% LISTA DE SÍMBOLOS %%%%%%%%
+% Definições dos símbolos. A lista (\listofsymbols) é ordenada por ORDEM DE USO
+% (sort=use, padrão ABNT). Como os símbolos são escritos direto nas equações
+% (sem \gls), o bloco \AtBeginDocument{\glsadd{...}} no final deste arquivo
+% força a inclusão de todos eles na ordem desejada, sem alterar as equações.
+
+% --- Referenciais e cinemática ---
+\newglossaryentry{sym_pg}{name=\ensuremath{\mathbf{p}^{g}}, description={Vetor de posição no referencial de navegação (NED)}, sort={pg}}
+\newglossaryentry{sym_vg}{name=\ensuremath{\mathbf{v}^{g}}, description={Vetor de velocidade linear no referencial de navegação}, sort={vg}}
+\newglossaryentry{sym_vb}{name=\ensuremath{\mathbf{v}^{b}}, description={Vetor de velocidade linear no referencial do corpo}, sort={vb}}
+\newglossaryentry{sym_wb}{name=\ensuremath{\boldsymbol{\omega}^{b}}, description={Vetor de velocidade angular no referencial do corpo}, sort={wb}}
+\newglossaryentry{sym_p}{name=\ensuremath{p}, description={Velocidade angular de rolagem}, sort={p}}
+\newglossaryentry{sym_q}{name=\ensuremath{q}, description={Velocidade angular de arfagem}, sort={q}}
+\newglossaryentry{sym_r}{name=\ensuremath{r}, description={Velocidade angular de guinada}, sort={r}}
+\newglossaryentry{sym_u}{name=\ensuremath{u}, description={Velocidade linear ao longo do eixo \ensuremath{i^{b}}}, sort={u}}
+\newglossaryentry{sym_v}{name=\ensuremath{v}, description={Velocidade linear ao longo do eixo \ensuremath{j^{b}}}, sort={v}}
+\newglossaryentry{sym_w}{name=\ensuremath{w}, description={Velocidade linear ao longo do eixo \ensuremath{k^{b}}}, sort={w}}
+
+% --- Atitude ---
+\newglossaryentry{sym_phi}{name=\ensuremath{\phi}, description={Ângulo de Euler de rolagem}, sort={phi}}
+\newglossaryentry{sym_theta}{name=\ensuremath{\theta}, description={Ângulo de Euler de arfagem}, sort={theta}}
+\newglossaryentry{sym_psi}{name=\ensuremath{\psi}, description={Ângulo de Euler de guinada}, sort={psi}}
+\newglossaryentry{sym_R}{name=\ensuremath{\mathbf{R}^{g}_{b}}, description={Matriz de rotação do referencial do corpo para o de navegação}, sort={R}}
+\newglossaryentry{sym_gb}{name=\ensuremath{\mathbf{g}^{b}}, description={Vetor da gravidade projetado no referencial do corpo}, sort={gb}}
+\newglossaryentry{sym_g}{name=\ensuremath{g}, description={Aceleração da gravidade}, sort={g}}
+
+% --- Propulsão e alocação ---
+\newglossaryentry{sym_Omega}{name=\ensuremath{\Omega_i}, description={Velocidade angular do \ensuremath{i}-ésimo rotor}, sort={Omega}}
+\newglossaryentry{sym_Ti}{name=\ensuremath{T_i}, description={Empuxo gerado pelo \ensuremath{i}-ésimo rotor}, sort={Ti}}
+\newglossaryentry{sym_Qi}{name=\ensuremath{Q_i}, description={Torque de reação do \ensuremath{i}-ésimo rotor}, sort={Qi}}
+\newglossaryentry{sym_cT}{name=\ensuremath{c_{T}}, description={Coeficiente de empuxo do motor}, sort={cT}}
+\newglossaryentry{sym_cM}{name=\ensuremath{c_{M}}, description={Coeficiente de torque do motor}, sort={cM}}
+\newglossaryentry{sym_sigma}{name=\ensuremath{\sigma_i}, description={Comando PWM normalizado do \ensuremath{i}-ésimo motor}, sort={sigma}}
+\newglossaryentry{sym_CR}{name=\ensuremath{C_R}, description={Constante de proporção entre o PWM e a velocidade angular}, sort={CR}}
+\newglossaryentry{sym_Omegab}{name=\ensuremath{\Omega_b}, description={Velocidade angular mínima inicial do motor}, sort={Omegab}}
+\newglossaryentry{sym_T}{name=\ensuremath{T}, description={Empuxo total gerado pelos motores}, sort={T}}
+\newglossaryentry{sym_taux}{name=\ensuremath{\tau_x}, description={Momento de controle de rolagem}, sort={taux}}
+\newglossaryentry{sym_tauy}{name=\ensuremath{\tau_y}, description={Momento de controle de arfagem}, sort={tauy}}
+\newglossaryentry{sym_tauz}{name=\ensuremath{\tau_z}, description={Momento de controle de guinada}, sort={tauz}}
+\newglossaryentry{sym_Lxr}{name=\ensuremath{L_{x_r}}, description={Braço lateral do centro de massa aos rotores do lado direito}, sort={Lxr}}
+\newglossaryentry{sym_Lxl}{name=\ensuremath{L_{x_l}}, description={Braço lateral do centro de massa aos rotores do lado esquerdo}, sort={Lxl}}
+\newglossaryentry{sym_Lyf}{name=\ensuremath{L_{y_f}}, description={Braço longitudinal do centro de massa aos rotores dianteiros}, sort={Lyf}}
+\newglossaryentry{sym_Lyr}{name=\ensuremath{L_{y_r}}, description={Braço longitudinal do centro de massa aos rotores traseiros}, sort={Lyr}}
+\newglossaryentry{sym_Balloc}{name=\ensuremath{\mathbf{B}}, description={Matriz de alocação dos motores}, sort={Balloc}}
+
+% --- Dinâmica rotacional ---
+\newglossaryentry{sym_J}{name=\ensuremath{\mathbf{J}}, description={Matriz de momentos de inércia do corpo rígido}, sort={J}}
+\newglossaryentry{sym_Jii}{name=\ensuremath{J_{xx},\,J_{yy},\,J_{zz}}, description={Momentos de inércia em torno dos eixos do corpo}, sort={Jii}}
+\newglossaryentry{sym_Jxz}{name=\ensuremath{J_{xz}}, description={Produto de inércia}, sort={Jxz}}
+\newglossaryentry{sym_Gamma}{name=\ensuremath{\Gamma}, description={Determinante de inércia, \ensuremath{\Gamma = J_x J_z - J_{xz}^2}}, sort={Gamma}}
+\newglossaryentry{sym_Gammai}{name=\ensuremath{\Gamma_1,\dots,\Gamma_8}, description={Coeficientes de inércia da dinâmica rotacional}, sort={Gammai}}
+\newglossaryentry{sym_cpqr}{name=\ensuremath{c_p,\,c_q,\,c_r}, description={Coeficientes de arrasto angular em rolagem, arfagem e guinada}, sort={cpqr}}
+
+% --- Dinâmica translacional ---
+\newglossaryentry{sym_m}{name=\ensuremath{m}, description={Massa total da aeronave}, sort={m}}
+\newglossaryentry{sym_fb}{name=\ensuremath{\mathbf{f}^{b}}, description={Vetor das forças aplicadas, no referencial do corpo}, sort={fb}}
+
+% --- Modelo do acelerômetro ---
+\newglossaryentry{sym_rimu}{name=\ensuremath{\mathbf{r}_{imu}}, description={Vetor de deslocamento do centro de massa ao acelerômetro (IMU)}, sort={rimu}}
+\newglossaryentry{sym_aimu}{name=\ensuremath{\mathbf{a}_{imu}^{b}}, description={Força específica medida pelo acelerômetro}, sort={aimu}}
+\newglossaryentry{sym_bias}{name=\ensuremath{\mathbf{b}}, description={Viés constante do acelerômetro}, sort={bias}}
+
+% --- Identificação ---
+\newglossaryentry{sym_Theta}{name=\ensuremath{\Theta}, description={Vetor de parâmetros a ser identificado}, sort={Theta}}
+\newglossaryentry{sym_Theta0}{name=\ensuremath{\Theta_0}, description={Conjunto inicial de parâmetros (modelo geométrico)}, sort={Theta0}}
+\newglossaryentry{sym_ThetaEEM}{name=\ensuremath{\Theta_{\text{EEM}}}, description={Conjunto de parâmetros estimado pelo EEM}, sort={ThetaEEM}}
+\newglossaryentry{sym_ThetaOEM}{name=\ensuremath{\Theta_{\text{OEM}}}, description={Conjunto de parâmetros final, estimado pelo OEM}, sort={ThetaOEM}}
+
+% --- Linearização ---
+\newglossaryentry{sym_x}{name=\ensuremath{\mathbf{x}}, description={Vetor de estados do modelo}, sort={x}}
+\newglossaryentry{sym_uvec}{name=\ensuremath{\mathbf{u}}, description={Vetor de entradas de controle}, sort={uvec}}
+\newglossaryentry{sym_A}{name=\ensuremath{\mathbf{A}}, description={Matriz de estado do modelo linearizado}, sort={A}}
+
+%%%%%%%% Inclusão na lista (ordem de aparição) %%%%%%%%
+% \glsadd força a entrada na Lista de Símbolos sem precisar de \gls nas equações.
+% Define-se o comando \addsymbolstolist, chamado em PreTextuais/main.tex logo
+% ANTES de \listofsymbols (já depois da capa): popula a lista a tempo e sem
+% criar página em branco antes da capa.
+\newcommand{\addsymbolstolist}{%
+  \glsadd{sym_pg}\glsadd{sym_vg}\glsadd{sym_vb}\glsadd{sym_wb}%
+  \glsadd{sym_p}\glsadd{sym_q}\glsadd{sym_r}%
+  \glsadd{sym_u}\glsadd{sym_v}\glsadd{sym_w}%
+  \glsadd{sym_phi}\glsadd{sym_theta}\glsadd{sym_psi}\glsadd{sym_R}\glsadd{sym_gb}\glsadd{sym_g}%
+  \glsadd{sym_Omega}\glsadd{sym_Ti}\glsadd{sym_Qi}\glsadd{sym_cT}\glsadd{sym_cM}%
+  \glsadd{sym_sigma}\glsadd{sym_CR}\glsadd{sym_Omegab}\glsadd{sym_T}%
+  \glsadd{sym_taux}\glsadd{sym_tauy}\glsadd{sym_tauz}%
+  \glsadd{sym_Lxr}\glsadd{sym_Lxl}\glsadd{sym_Lyf}\glsadd{sym_Lyr}\glsadd{sym_Balloc}%
+  \glsadd{sym_J}\glsadd{sym_Jii}\glsadd{sym_Jxz}\glsadd{sym_Gamma}\glsadd{sym_Gammai}\glsadd{sym_cpqr}%
+  \glsadd{sym_m}\glsadd{sym_fb}%
+  \glsadd{sym_rimu}\glsadd{sym_aimu}\glsadd{sym_bias}%
+  \glsadd{sym_Theta}\glsadd{sym_Theta0}\glsadd{sym_ThetaEEM}\glsadd{sym_ThetaOEM}%
+  \glsadd{sym_x}\glsadd{sym_uvec}\glsadd{sym_A}%
+}

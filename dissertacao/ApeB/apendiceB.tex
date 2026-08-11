@@ -1,0 +1,61 @@
+Este apêndice apresenta a linearização do modelo não linear deduzido no Capítulo~2, que fundamenta o projeto de controle do Capítulo~5. O modelo não linear representa fielmente a dinâmica, mas dificulta a aplicação das técnicas de controle clássico adotadas neste trabalho. Por isso, lineariza-se o modelo em torno de um ponto de equilíbrio, obtendo uma representação em espaço de estados válida para pequenas perturbações \cite{Beard2012}, sobre a qual as malhas de controle são sintetizadas. Reunindo os estados do corpo rígido no vetor:
+\begin{equation}
+  \mathbf{x} = [\,p\ \ q\ \ r\ \ \phi\ \ \theta\ \ \psi\ \ u\ \ v\ \ w\,]^{\mathsf{T}}
+\end{equation}
+e as entradas de controle:
+\begin{equation}
+  \mathbf{u} = [\,T\ \ \tau_x\ \ \tau_y\ \ \tau_z\,]^{\mathsf{T}}
+\end{equation}
+
+A dinâmica é escrita de forma compacta como $\dot{\mathbf{x}} = f(\mathbf{x}, \mathbf{u})$.
+
+O ponto de equilíbrio adotado é o voo pairado (\textit{hover}): a aeronave nivelada e em repouso ($p=q=r=0$, $\phi=\theta=0$, $u=v=w=0$), com o empuxo total equilibrando o peso, de modo que $\mathbf{u}_{eq} = [\,mg\ \ 0\ \ 0\ \ 0\,]^{\mathsf{T}}$.
+
+Aplicando a expansão em série de Taylor de primeira ordem em torno de $(\mathbf{x}_{eq}, \mathbf{u}_{eq})$ e retendo apenas o termo linear, obtém-se o modelo nas variáveis de perturbação $\delta\mathbf{x} = \mathbf{x} - \mathbf{x}_{eq}$ e $\delta\mathbf{u} = \mathbf{u} - \mathbf{u}_{eq}$:
+\begin{equation}
+    \delta\dot{\mathbf{x}} = \mathbf{A}\,\delta\mathbf{x} + \mathbf{B}\,\delta\mathbf{u},
+    \label{eq:state-space}
+\end{equation}
+em que as matrizes de estado $\mathbf{A}$ e de entrada $\mathbf{B}$ são os jacobianos do campo $f$ avaliados no equilíbrio:
+\begin{equation}
+    \mathbf{A} = \left.\frac{\partial f}{\partial \mathbf{x}}\right|_{(\mathbf{x}_{eq},\,\mathbf{u}_{eq})} \in \mathbb{R}^{9\times 9},
+    \qquad
+    \mathbf{B} = \left.\frac{\partial f}{\partial \mathbf{u}}\right|_{(\mathbf{x}_{eq},\,\mathbf{u}_{eq})} \in \mathbb{R}^{9\times 4}.
+    \label{eq:jacobianos}
+\end{equation}
+
+Como o modelo de corpo rígido é linear nas entradas $T$, $\tau_x$, $\tau_y$ e $\tau_z$, a matriz $\mathbf{B}$ é constante, independente do ponto de operação. Como o modelo é diferenciável, os jacobianos são obtidos analiticamente, avaliados no hover assumem a forma fechada das Equações \eqref{eq:matrix-A} e \eqref{eq:matrix-B}.
+
+Avaliados no ponto de equilíbrio de voo pairado, no qual $\phi=\theta=0$ (e, portanto, $s_\phi=s_\theta=0$ e $c_\phi=c_\theta=1$) e todas as velocidades são nulas, de modo que os termos giroscópicos e de Coriolis se anulam, os jacobianos assumem a forma:
+\begin{equation}
+    \mathbf{A} =
+    \begin{bmatrix}
+        -c_p & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & -c_q & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & -c_r & 0 & 0 & 0 & 0 & 0 & 0 \\
+        1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & -g & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & g & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0
+    \end{bmatrix},
+    \label{eq:matrix-A}
+\end{equation}
+\begin{equation}
+    \mathbf{B} =
+    \begin{bmatrix}
+        0 & \Gamma_3 & 0 & \Gamma_4 \\
+        0 & 0 & 1/J_y & 0 \\
+        0 & \Gamma_4 & 0 & \Gamma_8 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        -1/m & 0 & 0 & 0
+    \end{bmatrix},
+    \label{eq:matrix-B}
+\end{equation}
+
+A estrutura dessas matrizes evidencia o desacoplamento característico do voo pairado. Na matriz $\mathbf{A}$, as linhas da cinemática mapeiam diretamente as velocidades angulares nas taxas dos ângulos de Euler ($\dot\phi=p$, $\dot\theta=q$, $\dot\psi=r$), enquanto o único acoplamento entre atitude e translação ocorre por meio da gravidade: uma inclinação em arfagem ($\theta$) produz aceleração longitudinal ($-g\,\theta$ em $\dot u$) e uma inclinação em rolagem ($\phi$) produz aceleração lateral ($g\,\phi$ em $\dot v$). A matriz $\mathbf{B}$, por sua vez, concentra a ação de controle: os momentos atuam nas acelerações angulares por meio dos coeficientes de inércia $\Gamma_3$, $\Gamma_4$, $\Gamma_8$ e $1/J_y$, e o empuxo total $T$ atua na aceleração vertical através de $-1/m$.

@@ -1,0 +1,21 @@
+LOGO DO ITA
+===========
+
+Coloque AQUI o arquivo do logo do ITA, de preferência em PDF ou PNG
+(fundo transparente), com o nome:
+
+    ita.pdf     (ou   ita.png)
+
+Depois, no arquivo ../apresentacao.tex, descomente UMA das opções:
+
+  (A) Logo pequeno em TODOS os slides (rodapé):
+      procure a linha
+        % \logo{\includegraphics[height=0.65cm]{logos/ita}}
+      e remova o "%" do início.
+
+  (B) Logo grande só na CAPA:
+      no frame da capa, procure
+        % \begin{center}\includegraphics[height=1.4cm]{logos/ita}\end{center}
+      e remova o "%" do início.
+
+Se o arquivo tiver outro nome/extensão, ajuste o {logos/ita} correspondente.
