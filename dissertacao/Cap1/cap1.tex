@@ -158,13 +158,13 @@ Esta dissertação está organizada em seis capítulos, descritos a seguir:
 \begin{itemize}
     \item \textbf{Capítulo 1:} apresenta o contexto da dissertação, a motivação e os objetivos do projeto, delimitando o problema da modelagem do drone VTOL em modo multirrotor para o controle de decolagem.
 
-    \item \textbf{Capítulo 2:} desenvolve a modelagem matemática da aeronave em modo quadrirrotor, abordando os sistemas e as transformações de coordenadas, as equações de movimento (modelos rotacional e translacional e a cinemática de Euler) e o modelo do motor.
+    \item {\color{blue}\textbf{Capítulo 2:} descreve a plataforma física e a instrumentação do VTOL, a aeronave e sua geometria, o sistema de propulsão (motor e ESC) e a aviônica embarcada, e apresenta a metodologia de identificação: o problema da identificação de sistemas instáveis, as abordagens de caixa branca, cinza e preta e a identificação em malha fechada e aberta.}
 
-    \item \textbf{Capítulo 3:} descreve a plataforma física e a instrumentação do VTOL, abordando a aeronave e sua geometria, o sistema de propulsão (motor e ESC) e a aviônica embarcada (controladora de voo Pixhawk, sensores inerciais e receptor GPS).
+    \item {\color{blue}\textbf{Capítulo 3:}} desenvolve a modelagem matemática da aeronave em modo quadrirrotor, abordando os sistemas e as transformações de coordenadas, as equações de movimento (modelos rotacional e translacional e a cinemática de Euler){\color{blue}, a composição das forças e momentos, as parcelas aerodinâmicas da estrutura} e o modelo do motor.
 
-    \item \textbf{Capítulo 4:} apresenta a estratégia para a identificação do drone híbrido em modo quadrirrotor. Discute o tratamento de sistemas instáveis e detalha as etapas da metodologia M4V adotada: a definição das manobras, a aquisição dos dados de saída, os métodos de estimação, com ênfase no OEM, o modelo não linear e os critérios de validação no domínio do tempo.
+    \item \textbf{Capítulo 4:} apresenta a estratégia para a identificação do drone híbrido em modo quadrirrotor{\color{blue}, detalhando} as etapas da metodologia M4V adotada: a definição das manobras, a aquisição dos dados de saída{\color{blue}, com a campanha de voo realizada}, os métodos de estimação, com ênfase no OEM, o modelo não linear, os critérios de validação no domínio do tempo {\color{blue}e a verificação da coerência dos dados adquiridos}.
 
-    \item \textbf{Capítulo 5:} avalia os resultados obtidos. Começa pela verificação da coerência dos dados de entrada, seguida da identificação do modelo não linear via OEM e da sua validação. Com o modelo identificado, apresenta o projeto do controlador em cascata (arquitetura, controladores PID e ganhos), a simulação da malha fechada no modelo linear e a comparação do controle aplicado às plantas linear e não linear.
+    \item \textbf{Capítulo 5:} avalia os resultados obtidos{\color{blue}: a} identificação do modelo não linear via OEM e {\color{blue}sua} validação. Com o modelo identificado, apresenta o projeto do controlador em cascata (arquitetura, controladores PID e ganhos), a simulação da malha fechada no modelo linear e a comparação do controle aplicado às plantas linear e não linear.
 
     \item \textbf{Capítulo 6:} apresenta as conclusões obtidas do trabalho desenvolvido e as sugestões de implementações para trabalhos futuros.
 \end{itemize}

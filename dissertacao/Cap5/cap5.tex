@@ -2,71 +2,6 @@ Os resultados apresentados neste capítulo decorrem diretamente da campanha de v
 
 Para isso, o capítulo segue a ordem preconizada pela metodologia M4V. Primeiro, valida-se a coerência dos dados de entrada, confrontando as manobras planejadas com as efetivamente realizadas em voo. Em seguida, realiza-se a identificação do modelo por meio do método OEM. Por fim, projeta-se o controle e compara-se a resposta do modelo linear com a do modelo não linear, evidenciando até onde a aproximação linear permanece representativa.
 
-\section{Verificação da Coerência de Dados de Entrada}
-
-Os critérios objetivos estabelecidos para a definição das manobras são, nesta seção, confrontados com as manobras efetivamente realizadas em voo, verificando-se a coerência dos dados de entrada antes da estimação. A análise percorre o registro de voo completo, compondo as velocidades angulares medidas ($p,q,r$) que constituem a resposta, enquanto os momentos de controle ($\tau_x,\tau_y,\tau_z$), a entrada efetiva do estimador, são reconstruídos dos comandos de PWM pela mesma alocação empregada no modelo de identificação. A Figura~\ref{fig:exc_overview} apresenta a cadeia completa de sinais ao longo do voo, desde o comando do piloto (RCIN), os PWM dos motores (RCOU), os momentos gerados, até as velocidades angulares de resposta.
-
-\begin{figure}[ht]
-    \centering
-    \includegraphics[width=\textwidth]{Cap5/excitacao_overview.png}
-    \caption{Cadeia de sinais da excitação ao longo do voo: comando do piloto (RCIN), PWM dos motores (RCOU), momentos gerados ($\tau_x,\tau_y,\tau_z$) e taxas angulares de resposta ($p,q,r$).}
-    \label{fig:exc_overview}
-\end{figure}
-
-A verificação inicia-se pelo critério de entrada: o conteúdo de frequência da excitação. Uma boa manobra concentra sua energia na banda da dinâmica do canal-alvo, em torno da frequência característica $\omega_n$, segundo a relação $\Delta t \approx 2{,}3/\omega_n$ (Equação~\ref{eq:doublet-dt}), e apresenta energia praticamente nula em frequência zero. A Figura~\ref{fig:exc_doublet} isola um \textit{doublet} representativo de cada eixo, no tempo (momento $\tau$ aplicado e taxa de resposta) e em frequência (densidade espectral do momento). Em rolagem e arfagem, o \textit{doublet} é nítido e simétrico, com largura de pulso $\Delta t \approx 0{,}4$~s e energia concentrada próximo de $1$~Hz, dentro da banda da dinâmica de taxa e desprezível em frequência nula, atendendo ao critério. A guinada evidencia a limitação do canal, pois, por ter baixa amplitude de controle e resposta lenta, não foi possível comandar um \textit{doublet} rápido, a excitação resultante é cerca de cinco vezes mais lenta ($\Delta t \approx 2{,}0$~s) e de menor amplitude, com energia concentrada em apenas $0{,}23$~Hz. A Tabela~\ref{tab:freq} resume esses valores.
-
-\begin{figure}[ht]
-    \centering
-    \includegraphics[width=\textwidth]{Cap5/excitacao_doublet.png}
-    \caption{Doublet isolado de cada eixo (de cima para baixo: rolagem, arfagem e guinada). À esquerda, no tempo: momento de controle $\tau$ (azul, eixo esquerdo) e taxa angular de resposta (laranja tracejado, eixo direito). À direita, a densidade espectral de potência do momento, com o pico de energia e a banda útil ($\approx 1{:}3$, faixa verde) destacados.}
-    \label{fig:exc_doublet}
-\end{figure}
-
-\begin{table}[ht]
-\centering
-\caption{Critério de entrada (conteúdo de frequência) por eixo, avaliado no \textit{doublet} isolado da Figura~\ref{fig:exc_doublet}.}
-\label{tab:freq}
-\begin{tabular}{lccc}
-\toprule
-Eixo (segmento) & $\sigma_\tau$ [N$\cdot$m] & $\Delta t$ [s] & $f_{\text{pico}}$ [Hz] \\
-\midrule
-Rolagem ($40$--$80$~s)  & 0,52 & 0,40 & 1,19 \\
-Arfagem ($80$--$125$~s) & 0,71 & 0,40 & 0,90 \\
-Guinada ($0$--$40$~s)   & 0,07 & 2,00 & 0,23 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-A relação sinal--ruído e o isolamento, por sua vez, foram avaliados em janelas deslizantes de $20$~s, com passo de $10$~s, ao longo de todo o voo, conforme a Figura~\ref{fig:exc_snr}. Em cada eixo, as janelas correspondentes ao segmento de manobra dedicado (faixa verde) destacam-se das demais, reunindo simultaneamente a maior relação sinal-ruído e o maior isolamento, evidência direta de que a excitação foi concentrada no eixo e no instante planejados.
-
-\begin{figure}[ht]
-    \centering
-    \includegraphics[width=0.85\textwidth]{Cap5/excitacao_snr.png}
-    \caption{Relação sinal--ruído (Equação~\ref{eq:snr}; barras azuis, eixo esquerdo) e isolamento $\rho$ (Equação~\ref{eq:isolamento}; barras laranja, eixo direito)}
-    \label{fig:exc_snr}
-\end{figure}
-
-Restringindo a análise aos três segmentos efetivamente empregados na estimação, guinada ($0$--$40$~s), rolagem ($40$--$80$~s) e arfagem ($80$--$125$~s), a Tabela~\ref{tab:manobras} resume os critérios de resposta, relação sinal--ruído e isolamento, em cada segmento.
-
-Nota-se que $\tau_x$ e $\tau_y$ resultam de diferenças de empuxo multiplicadas pelos braços, ao passo que $\tau_z$ resulta apenas das diferenças de torque de reação dos rotores; por isso a guinada é o canal com maior dificuldade de variar a manobra.
-
-\begin{table}[ht]
-\centering
-\caption{Critérios de resposta (relação sinal--ruído e isolamento) por segmento de manobra.}
-\label{tab:manobras}
-\begin{tabular}{lccc}
-\toprule
-Eixo (segmento) & $\sigma_{\text{taxa}}$ [rad/s] & Isolamento $\rho$ & SNR \\
-\midrule
-Rolagem ($40$--$80$~s)  & 0,75 & 3,2 & 62 \\
-Arfagem ($80$--$125$~s) & 0,67 & 6,2 & 60 \\
-Guinada ($0$--$40$~s)   & 0,31 & 1,7 & 142 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Todos os eixos superam com folga o critério de relação sinal-ruído ($\text{SNR} \geq 3$), e os \textit{doublets} de rolagem e arfagem apresentam forte isolamento ($\rho = 3{,}2$ e $6{,}2$) e frequência de pico próxima de $1$~Hz, na banda da dinâmica de taxa. A guinada, por sua vez, é o canal de menor autoridade de controle: $\tau_z$ provém apenas do torque de reação dos rotores (Equação~\ref{eq:tau_z}), cerca de cinco vezes menor que os momentos de rolagem e arfagem. Em consequência, é o eixo de menor isolamento ($\rho = 1{,}7$) e de pior observabilidade, pois, a inércia $J_z$ possui o valor mais elevado de todos os eixos, devido o acúmulo da densidade da aeronave no plano XY, razão pela qual esse parâmetro é possui os piores valores nas análises. Esses resultados confirmam que as manobras realizadas atendem aos critérios estabelecidos, sustentando a qualidade da identificação apresentada nas seções seguintes.
-
 \section{Identificação do Modelo Não Linear através de OEM}
 
 Aplicada a metodologia EEM--OEM descrita no capítulo anterior às janelas de treino selecionadas, esta seção apresenta a identificação dos parâmetros do modelo não linear. Parte-se do modelo inicial $\Theta_{\text{0}}$, construído com as inércias de projeto (CAD), os coeficientes de motor de bancada e estimativas iniciais de arrasto angular (Tabela~\ref{tab:p0}); em seguida, o EEM fornece uma estimativa algébrica $\Theta_{\text{EEM}}$, refinada pelo OEM progressivo até o conjunto final $\Theta_{\text{OEM}}$.
@@ -203,7 +138,7 @@ Cabe registrar, por fim, que a separação entre os efeitos dos rotores e os da 
 \section{Comparação do Controle no Modelo Linear e Não Linear}
 \label{sec:ctrl-cmp}
 
-A arquitetura de controle projetada nas seções anteriores sobre o modelo linearizado é agora confrontada com a planta não linear de corpo rígido do Capítulo~2, para mapear até onde a linearização em torno do voo pairado permanece válida. Em ambos os casos aplica-se a mesma lei de controle em cascata e a mesma cadeia de atuação, alocação nos quatro motores, saturação de PWM em $[\,1200,\ 2000\,]\ \mu$s e curva real do motor, de modo que a única diferença entre as respostas é a planta: linear, $\dot{\mathbf{x}}=A\mathbf{x}+B(\mathbf{u}-\mathbf{u}_0)$, ou não linear, integrando as equações completas de corpo rígido e a posição inercial.
+A arquitetura de controle projetada nas seções anteriores sobre o modelo linearizado é agora confrontada com a planta não linear de corpo rígido do Capítulo~\ref{chap:modelagem}, para mapear até onde a linearização em torno do voo pairado permanece válida. Em ambos os casos aplica-se a mesma lei de controle em cascata e a mesma cadeia de atuação, alocação nos quatro motores, saturação de PWM em $[\,1200,\ 2000\,]\ \mu$s e curva real do motor, de modo que a única diferença entre as respostas é a planta: linear, $\dot{\mathbf{x}}=A\mathbf{x}+B(\mathbf{u}-\mathbf{u}_0)$, ou não linear, integrando as equações completas de corpo rígido e a posição inercial.
 
 Duas não linearidades, desprezadas na linearização de voo pairado, ganham peso à medida que a manobra se afasta dessa condição:
 \begin{itemize}

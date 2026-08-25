@@ -100,7 +100,7 @@ O controle de voo do VTOL em modo multirrotor é organizado em uma arquitetura e
     \item {\color{blue}\textbf{Malha de altitude}: a partir da altitude de referência $h_{r}$, realimentada pela altitude $h$ medida, um controlador PD com realimentação direta do peso $mg$ gera o empuxo total de referência $T_{sp}$;}
     \item {\color{blue}\textbf{Malha de velocidade de avanço}: a partir da velocidade longitudinal de referência $u_{r}$, realimentada pela velocidade $u$ estimada, um controlador PI gera a atitude de referência $\Theta_{r}$, com a rolagem regulada em zero e a guinada mantida na referência;}
     \item {\color{blue}\textbf{Malhas de atitude}: a partir de $\Theta_{r}$, realimentadas pela atitude $\Theta$ medida, controladores PD por eixo geram o momento de referência $\boldsymbol{\tau}_{sp}$, com o termo derivativo atuando sobre a velocidade angular $\boldsymbol{\omega}$ medida pelo giroscópio, o que embute a malha de taxa sem uma referência $\boldsymbol{\omega}_{sp}$ explícita;}
-    \item {\color{blue}\textbf{Alocação de controle}: converte o momento de referência $\boldsymbol{\tau}_{sp}$ e o empuxo total $T_{sp}$ nos comandos individuais dos atuadores, pela matriz de alocação deduzida no Capítulo~2, fechando a cadeia pelo modelo do motor até o drone.}
+    \item {\color{blue}\textbf{Alocação de controle}: converte o momento de referência $\boldsymbol{\tau}_{sp}$ e o empuxo total $T_{sp}$ nos comandos individuais dos atuadores, pela matriz de alocação deduzida no Capítulo~\ref{chap:modelagem}, fechando a cadeia pelo modelo do motor até o drone.}
 \end{itemize}
 
 A malha mais interna de velocidade angular corresponde justamente à dinâmica identificada nas seções anteriores, onde o modelo de taxa estimado por OEM é a planta sobre a qual essa malha é projetada, de modo que a qualidade da identificação reflete-se diretamente no desempenho do controle de atitude. Modelos de planta mais sofisticados, que capturam efeitos aerodinâmicos por abordagens híbridas combinando princípios físicos e aprendizado de máquina \cite{Bauersfeld2021}, são possíveis, porém o modelo de corpo rígido identificado mostra-se suficiente para o controle em torno do voo pairado. Cada malha é implementada por um controlador PID com saturação, projetado nas seções seguintes.
@@ -229,7 +229,7 @@ Para avaliar a arquitetura projetada, a malha fechada foi simulada sobre o mesmo
 
 \subsection{Saturação dos atuadores}
 
-Diferentemente de uma simulação puramente linear, em que a planta receberia o comando $[\,T,\ \tau_x,\ \tau_y,\ \tau_z\,]$ de forma irrestrita, aqui o limite físico dos motores é imposto dentro da malha. A cada passo o comando do controlador é alocado nos quatro empuxos individuais pela inversa da matriz de alocação~$B$ deduzida no Capítulo~2,
+Diferentemente de uma simulação puramente linear, em que a planta receberia o comando $[\,T,\ \tau_x,\ \tau_y,\ \tau_z\,]$ de forma irrestrita, aqui o limite físico dos motores é imposto dentro da malha. A cada passo o comando do controlador é alocado nos quatro empuxos individuais pela inversa da matriz de alocação~$B$ deduzida no Capítulo~\ref{chap:modelagem},
 \begin{equation}
 \mathbf{T}_{mot}=B^{-1}\,[\,T,\ \tau_x,\ \tau_y,\ \tau_z\,]^{\mathsf{T}} ,
 \label{eq:aloc-inv}

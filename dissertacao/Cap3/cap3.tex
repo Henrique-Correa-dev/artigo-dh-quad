@@ -1,82 +1,4 @@
-\section{Identificação de Sistemas Instáveis}
-
-A identificação de sistemas é a área voltada à obtenção de modelos a partir de dados experimentais de entrada e saída, conforme apresenta a Figura \ref{identification-model}, em contraposição à modelagem caixa branca, derivada unicamente das leis físicas do processo. Existem dois tipos de identificação de sistemas, o método de caixa preta, onde o modelo é obtido exclusivamente a partir dos dados, e de caixa cinza, que combina uma estrutura física conhecida com a estimação de parâmetros baseada em medições \cite{Aguirre2015}. 
-
-Este trabalho enquadra-se na abordagem de caixa cinza, pois parte da estrutura física do modelo de corpo rígido, deduzida no Capítulo~2, e estima seus parâmetros a partir de dados reais de voo.
-
-\begin{figure}[ht]
-    \centering
-    \begin{tikzpicture}[
-        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.1cm, minimum width=4.6cm, align=center, font=\small},
-        arr/.style={-{Stealth[length=2.2mm]}, semithick},
-        io/.style={font=\small, align=center},
-        ttl/.style={font=\small\bfseries, anchor=west}
-    ]
-    % ------- a) processo real -------
-    \node[ttl] at (-2.2,1.15) {a) Processo em investigação};
-    \node[blk, font=\small\bfseries] (sys) at (3.2,0) {Sistema Dinâmico};
-    \node[io] (u1) at (-1.2,0) {Entradas\\$u$};
-    \node[io] (z1) at (7.6,0)  {Saídas\\$z$};
-    \draw[arr] (u1) -- (sys);
-    \draw[arr] (sys) -- (z1);
-    % ------- b) modelo -------
-    \node[ttl] at (-2.2,-1.75) {b) Representação do modelo no domínio do tempo};
-    \node[blk, minimum height=2.0cm, bottom color=blue!12] (mod) at (3.2,-3.2)
-        {{\bfseries\color{blue!55!black}Modelo Matemático}\\[2pt]
-         $\dot{x}(t) = f\big(x(t),u(t),\Theta\big)$\\[1pt]
-         $y(t) = g\big(x(t),u(t),\Theta\big)$};
-    \node[io] (u2) at (-1.2,-3.2) {$u$};
-    \node[io] (y2) at (7.6,-3.2)  {$y$};
-    \draw[arr] (u2) -- (mod);
-    \draw[arr] (mod) -- (y2);
-    \end{tikzpicture}
-    \caption{Modelagem Matemática de um Sistema Físico \cite[Adaptado de][]{Jategaonkar2015}.}
-    \label{identification-model}
-\end{figure}
-
-O processo de identificação compara, a partir de um mesmo sinal de entrada $u$, a medição do sistema dinâmico e a saída do modelo matemático, para estimação dos melhores parâmetros e estruturas para representar esse processo físico \cite{Aguirre2015}. Porém, como apresentado em \textcite{Jategaonkar2015}, determinados tipos de sistemas são instáveis a entrada em malha aberta, portanto, necessitam de um controlador para que seja possível observar o sistema e realizar a identificação.
-
-Considerando a Figura \ref{identification-diagram} para identificar o sistema $\mathbf{H}$, com o sinal de entrada $u$ e a medição dos sensores $z$, existem duas abordagens diferentes, onde a primeira observa o conjunto completo indicada como identificação por malha-fechada, relacionando as entradas de comando $\boldsymbol{\sigma_P}$ com a saída $z$, a qual é recomendada para processos em que se deseja apenas reproduzir o comportamento global, de comando para resposta. Por reunir a planta e o controlador em um único modelo equivalente, o sistema observado permanece estável, de forma que qualquer método padrão de estimação, como o método do erro de saída, pode ser aplicado sem dificuldades numéricas. Sua principal limitação, contudo, é fornecer apenas esse modelo equivalente do conjunto, sem separar os parâmetros da aeronave da dinâmica do controlador \cite{Jategaonkar2015}.
-
-A segunda abordagem é a identificação em malha aberta dentro do sistema controlado, o qual visa caracterizar diretamente a planta $\mathbf{H}$, o VTOL instável isolado, relacionando a entrada efetiva $u$, aplicada pelo controlador, com a saída medida $z$, como utilizado nos trabalhos de \textcite{Matt2025, Niermeyer2015}. É esta a abordagem adotada neste trabalho, por permitir estimar os parâmetros físicos do próprio drone, e não um modelo equivalente do conjunto planta-controlador. Em contrapartida, a integração de um sistema inerentemente instável pode conduzir à divergência numérica, ou correlação forte entre entrada e saída, quando é empregado o método do erro de saída clássico, exigindo cuidados específicos no processo de estimação \cite{Jategaonkar2015,Tischler2012}.
-
-\begin{figure}[ht]
-    \centering
-    \resizebox{0.95\textwidth}{!}{%
-    \begin{tikzpicture}[
-        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.3cm, minimum width=2.7cm, align=center, font=\small},
-        sum/.style={circle, draw=black!70, semithick, top color=white, bottom color=black!12, minimum size=0.6cm, font=\normalsize},
-        arr/.style={-{Stealth[length=2.2mm]}, semithick},
-        dbl/.style={{Stealth[length=2.2mm]}-{Stealth[length=2.2mm]}, semithick},
-        io/.style={font=\small, align=center},
-        lbl/.style={font=\footnotesize, inner sep=2pt},
-        dot/.style={circle, fill, inner sep=0pt, minimum size=3.2pt}
-    ]
-    % ------- malha -------
-    \node[io] (cmd) at (-0.85,0.3) {Comando\\$\delta_p$};
-    \node[blk] (ctrl) at (2.6,0) {Controlador\\$\mathbf{G}$};
-    \node[blk] (air)  at (8.0,0) {Aeronave\\$\mathbf{H}$};
-    \node[sum] (ns) at (10.8,0) {$\Sigma$};
-    \node[io, text=red!65!black] (ru) at (10.8,1.3) {ruído $v$};
-    \node[dot] (tz) at (11.9,0) {};
-    \node[io] (z) at (13.3,0) {Resposta\\$z$};
-    \draw[arr] (cmd) -- ([yshift=0.3cm]ctrl.west);
-    \draw[arr] (ctrl) -- node[lbl, below, pos=0.35] {$u$} (air);
-    \draw[arr] (air) -- node[lbl, above, pos=0.45] {$y$} node[lbl, below, pos=0.85] {$+$} (ns);
-    \draw[arr] (ru) -- node[lbl, right, pos=0.65] {$+$} (ns);
-    \draw[arr] (ns) -- (z);
-    \draw[arr] (tz) -- (11.9,-1.6) -- (1.0,-1.6) -- (1.0,-0.3) -- ([yshift=-0.3cm]ctrl.west);
-    % ------- faixas de identificacao -------
-    \draw[dashed, semithick, black!60] (-0.1,0.55) -- (-0.1,3.15);
-    \draw[dashed, semithick, black!60] (11.9,0.55) -- (11.9,3.15);
-    \draw[dashed, semithick, black!60] (4.35,0.55) -- (4.35,2.25);
-    \draw[dbl] (-0.1,2.9) -- node[fill=white, font=\footnotesize] {Identificação em malha fechada} (11.9,2.9);
-    \draw[dbl] (4.35,2.0) -- node[fill=white, font=\footnotesize] {Identificação em malha aberta ($\hat{\mathbf{H}}$)} (11.9,2.0);
-    \end{tikzpicture}%
-    }
-    \caption{Identificação de Sistemas Instáveis com Controlador \cite[Adaptado de][]{Jategaonkar2015}.}
-    \label{identification-diagram}
-\end{figure}
+{\color{blue}Este capítulo aplica ao drone híbrido a metodologia de identificação apresentada no Capítulo~\ref{chap:metodologia}, detalhando o planejamento das manobras, a aquisição e o tratamento dos dados, a estimação dos parâmetros e os critérios de validação.}
 
 \section{Método de Identificação M4V}
 
@@ -208,7 +130,7 @@ Distinguem-se, dessa forma, três sinais ao longo da cadeia de excitação: O co
     \label{cadeia}
 \end{figure}
 
-em que $T_i$ e $Q_i$ são o empuxo e o torque de reação do $i$-ésimo rotor, obtidos do comando $\sigma_i$ pelo modelo de motor do Capítulo~2. A entrada efetivamente analisada na avaliação da manobra é o momento $\tau$ do eixo excitado, e não o PWM bruto nem o comando do piloto.
+em que $T_i$ e $Q_i$ são o empuxo e o torque de reação do $i$-ésimo rotor, obtidos do comando $\sigma_i$ pelo modelo de motor do Capítulo~\ref{chap:modelagem}. A entrada efetivamente analisada na avaliação da manobra é o momento $\tau$ do eixo excitado, e não o PWM bruto nem o comando do piloto.
 
 Com a entrada definida, segue-se para a escolha da manobra, que parte de um critério bem determinado. Como o objetivo é estimar os parâmetros físicos da planta, e não reproduzir o comportamento comando-resposta, a manobra existe para tornar os dados informativos sobre esses parâmetros. Segundo \textcite{Tischler2012}, estimativas precisas exigem minimizar a covariância das estimativas, limitada inferiormente pelo limite de Cramér-Rao, a inversa da matriz de informação de Fisher, o que equivale a maximizar a informação contida nos dados. Na prática, isso significa alocar a energia da excitação na frequência certa: cada derivada é identificável em uma banda em torno da frequência característica do seu canal, de modo que a manobra deve concentrar energia nessa banda e quase nenhuma em frequência zero. Nesse contexto, \textcite{Jategaonkar2015} detalha duas manobras, o \textit{doublet} e o 3-2-1-1, concebidas para a excitação de aeronaves de asa fixa, mas igualmente aplicáveis ao multirrotor.
 
@@ -294,6 +216,31 @@ Em síntese, a teoria define critérios objetivos que uma boa manobra deve satis
 
 \subsection{Aquisição de dados de saída (\textit{Measurements})}
 \label{sec:measurements}
+
+\subsubsection{Campanha de voo}\label{sec:campanha}
+
+A campanha de voo compreendeu uma série de manobras, com o objetivo de excitar as principais dinâmicas do VTOL em modo multirrotor, o qual foi realizado no ginásio do COCTA com a presença dos membros do projeto drone híbrido, conforme a Figura~\ref{fig:campanha-voo}.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Cap5/voo1.png}
+    \caption{Campanha de voo no ginásio do COCTA.}
+    \label{fig:campanha-voo}
+\end{figure}
+
+Durante a campanha ocorreram trechos com quedas, perturbações e movimentos indesejados, descartados por corresponderem a regimes fora das hipóteses do modelo. As janelas aproveitadas para o treinamento e a validação foram selecionadas pelos critérios objetivos de qualidade da excitação definidos {\color{blue}neste capítulo}, como relação sinal-ruído, isolamento entre eixos e conteúdo em frequência, e não pelo desempenho do modelo sobre elas. Para o treinamento, priorizaram-se janelas que isolam um eixo de cada vez, guinada ($0$--$40$~s), rolagem ($40$--$80$~s) e arfagem ($80$--$125$~s) tornando a dinâmica de cada canal identificável separadamente, conforme debatido na seção de manobras e dados de entrada. Para a validação, reservaram-se janelas com movimentos compostos, $450$--$470$~s e $605$--$625$~s, em que os três eixos foram estimulados simultaneamente, avaliando o modelo em condições distintas das de treino, acoplando os efeitos para evitar o sobreajuste de um dos eixos. A Figura~\ref{fig:exc_dataset} apresenta a campanha completa, com as janelas destacadas.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/excitacao_dataset.png}
+    \caption{Campanha de voo, com as janelas de treino (verde) e de validação (laranja). O eixo do tempo é interrompido entre $150$ e $400$~s e truncado em $650$~s.}
+    \label{fig:exc_dataset}
+\end{figure}
+
+Da Figura~\ref{fig:exc_dataset} conclui-se que a campanha fornece o que a identificação requer: nas janelas de treino, trens de \textit{doublets} com um único eixo excitado por vez, visíveis como pulsos isolados de guinada, rolagem e arfagem, nas janelas de validação, comandos simultâneos nos três eixos, e, fora delas, os trechos de pouso e perturbação descartados.
+
+Essa inspeção visual, contudo, constitui apenas uma triagem preliminar. A verificação quantitativa da qualidade dos dados é realizada {\color{blue}na Seção~\ref{sec:coerencia}}, no qual cada janela é avaliada pelos critérios numéricos de conteúdo em frequência, relação sinal-ruído e isolamento entre eixos, com os resultados reunidos em tabelas, incluindo a menor autoridade do canal de guinada, quantificada ali.
+
 
 A segunda etapa do M4V trata da obtenção e do condicionamento dos sinais medidos em voo. Seu objetivo é converter o dado bruto registrado pelos sensores em sinais limpos, uniformemente amostrados e livres de erros sistemáticos, e verificar a compatibilidade cinemática entre as grandezas medidas, garantindo que sejam mutuamente consistentes antes de alimentar o estimador. A exatidão das estimativas depende diretamente da qualidade dessas medidas, de modo que esta etapa é tão determinante quanto a escolha da manobra \cite{Jategaonkar2015, Tischler2012}. A Figura~\ref{fig:pipeline-dados} resume a cadeia de processamento, do log bruto ao vetor de medidas $z$.
 
@@ -581,3 +528,68 @@ com $U^{b}+U^{v}+U^{c}=1$, sendo $\bar{z},\bar{y}$ as médias, $\sigma_z,\sigma_
 A parcela de viés $U^{b}$ capta erro sistemático de offset; a de variância $U^{v}$, discrepância de amplitude (amortecimento ou ganho mal capturados); e a de covariância $U^{c}$, o erro não sistemático (aleatório). O ideal é $U^{b}\approx 0$, $U^{v}\approx 0$ e $U^{c}\approx 1$: o resíduo concentra-se na parcela aleatória, sem componente estrutural --- indício de que a dinâmica foi corretamente capturada e o que resta é ruído \cite{Jategaonkar2015}.
 
 \textbf{Limite de Cramér--Rao.} Diferentemente das anteriores, que avaliam o ajuste, o limite de Cramér--Rao avalia a confiabilidade dos parâmetros. Da inversa da matriz de informação de Fisher, introduzida na etapa de métodos, extrai-se o desvio-padrão relativo de cada parâmetro; seguindo \textcite{Tischler2012} e \textcite{Sato2021}, valores abaixo de $20\%$ caracterizam um parâmetro bem identificado, enquanto valores superiores apontam baixa observabilidade, tipicamente os parâmetros do canal de guinada.
+
+\section{Verificação da Coerência de Dados de Entrada}\label{sec:coerencia}
+
+Os critérios objetivos estabelecidos para a definição das manobras são, nesta seção, confrontados com as manobras efetivamente realizadas em voo, verificando-se a coerência dos dados de entrada antes da estimação. A análise percorre o registro de voo completo, compondo as velocidades angulares medidas ($p,q,r$) que constituem a resposta, enquanto os momentos de controle ($\tau_x,\tau_y,\tau_z$), a entrada efetiva do estimador, são reconstruídos dos comandos de PWM pela mesma alocação empregada no modelo de identificação. A Figura~\ref{fig:exc_overview} apresenta a cadeia completa de sinais ao longo do voo, desde o comando do piloto (RCIN), os PWM dos motores (RCOU), os momentos gerados, até as velocidades angulares de resposta.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/excitacao_overview.png}
+    \caption{Cadeia de sinais da excitação ao longo do voo: comando do piloto (RCIN), PWM dos motores (RCOU), momentos gerados ($\tau_x,\tau_y,\tau_z$) e taxas angulares de resposta ($p,q,r$).}
+    \label{fig:exc_overview}
+\end{figure}
+
+A verificação inicia-se pelo critério de entrada: o conteúdo de frequência da excitação. Uma boa manobra concentra sua energia na banda da dinâmica do canal-alvo, em torno da frequência característica $\omega_n$, segundo a relação $\Delta t \approx 2{,}3/\omega_n$ (Equação~\ref{eq:doublet-dt}), e apresenta energia praticamente nula em frequência zero. A Figura~\ref{fig:exc_doublet} isola um \textit{doublet} representativo de cada eixo, no tempo (momento $\tau$ aplicado e taxa de resposta) e em frequência (densidade espectral do momento). Em rolagem e arfagem, o \textit{doublet} é nítido e simétrico, com largura de pulso $\Delta t \approx 0{,}4$~s e energia concentrada próximo de $1$~Hz, dentro da banda da dinâmica de taxa e desprezível em frequência nula, atendendo ao critério. A guinada evidencia a limitação do canal, pois, por ter baixa amplitude de controle e resposta lenta, não foi possível comandar um \textit{doublet} rápido, a excitação resultante é cerca de cinco vezes mais lenta ($\Delta t \approx 2{,}0$~s) e de menor amplitude, com energia concentrada em apenas $0{,}23$~Hz. A Tabela~\ref{tab:freq} resume esses valores.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\textwidth]{Cap5/excitacao_doublet.png}
+    \caption{Doublet isolado de cada eixo (de cima para baixo: rolagem, arfagem e guinada). À esquerda, no tempo: momento de controle $\tau$ (azul, eixo esquerdo) e taxa angular de resposta (laranja tracejado, eixo direito). À direita, a densidade espectral de potência do momento, com o pico de energia e a banda útil ($\approx 1{:}3$, faixa verde) destacados.}
+    \label{fig:exc_doublet}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Critério de entrada (conteúdo de frequência) por eixo, avaliado no \textit{doublet} isolado da Figura~\ref{fig:exc_doublet}.}
+\label{tab:freq}
+\begin{tabular}{lccc}
+\toprule
+Eixo (segmento) & $\sigma_\tau$ [N$\cdot$m] & $\Delta t$ [s] & $f_{\text{pico}}$ [Hz] \\
+\midrule
+Rolagem ($40$--$80$~s)  & 0,52 & 0,40 & 1,19 \\
+Arfagem ($80$--$125$~s) & 0,71 & 0,40 & 0,90 \\
+Guinada ($0$--$40$~s)   & 0,07 & 2,00 & 0,23 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A relação sinal--ruído e o isolamento, por sua vez, foram avaliados em janelas deslizantes de $20$~s, com passo de $10$~s, ao longo de todo o voo, conforme a Figura~\ref{fig:exc_snr}. Em cada eixo, as janelas correspondentes ao segmento de manobra dedicado (faixa verde) destacam-se das demais, reunindo simultaneamente a maior relação sinal-ruído e o maior isolamento, evidência direta de que a excitação foi concentrada no eixo e no instante planejados.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Cap5/excitacao_snr.png}
+    \caption{Relação sinal--ruído (Equação~\ref{eq:snr}; barras azuis, eixo esquerdo) e isolamento $\rho$ (Equação~\ref{eq:isolamento}; barras laranja, eixo direito)}
+    \label{fig:exc_snr}
+\end{figure}
+
+Restringindo a análise aos três segmentos efetivamente empregados na estimação, guinada ($0$--$40$~s), rolagem ($40$--$80$~s) e arfagem ($80$--$125$~s), a Tabela~\ref{tab:manobras} resume os critérios de resposta, relação sinal--ruído e isolamento, em cada segmento.
+
+Nota-se que $\tau_x$ e $\tau_y$ resultam de diferenças de empuxo multiplicadas pelos braços, ao passo que $\tau_z$ resulta apenas das diferenças de torque de reação dos rotores; por isso a guinada é o canal com maior dificuldade de variar a manobra.
+
+\begin{table}[ht]
+\centering
+\caption{Critérios de resposta (relação sinal--ruído e isolamento) por segmento de manobra.}
+\label{tab:manobras}
+\begin{tabular}{lccc}
+\toprule
+Eixo (segmento) & $\sigma_{\text{taxa}}$ [rad/s] & Isolamento $\rho$ & SNR \\
+\midrule
+Rolagem ($40$--$80$~s)  & 0,75 & 3,2 & 62 \\
+Arfagem ($80$--$125$~s) & 0,67 & 6,2 & 60 \\
+Guinada ($0$--$40$~s)   & 0,31 & 1,7 & 142 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Todos os eixos superam com folga o critério de relação sinal-ruído ($\text{SNR} \geq 3$), e os \textit{doublets} de rolagem e arfagem apresentam forte isolamento ($\rho = 3{,}2$ e $6{,}2$) e frequência de pico próxima de $1$~Hz, na banda da dinâmica de taxa. A guinada, por sua vez, é o canal de menor autoridade de controle: $\tau_z$ provém apenas do torque de reação dos rotores (Equação~\ref{eq:tau_z}), cerca de cinco vezes menor que os momentos de rolagem e arfagem. Em consequência, é o eixo de menor isolamento ($\rho = 1{,}7$) e de pior observabilidade, pois, a inércia $J_z$ possui o valor mais elevado de todos os eixos, devido o acúmulo da densidade da aeronave no plano XY, razão pela qual esse parâmetro é possui os piores valores nas análises. Esses resultados confirmam que as manobras realizadas atendem aos critérios estabelecidos, sustentando a qualidade da identificação apresentada nas seções seguintes.
