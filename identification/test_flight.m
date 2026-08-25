@@ -1,6 +1,10 @@
 %% test_flight.m
 %  Junta múltiplos logs de voo num único time-base contínuo e plota:
-%  RCOU (motores), pqr (gyro), Acc (IMU), ATT (atitude), RCIN (rádio).
+%  RCOU (motores), pqr (gyro), Acc (IMU), ATT (atitude), RCIN (rádio),
+%  MAG (magnetômetro) e GPS (velocidade NED).
+%  MAG e GPS são incluídos para alimentar um EKF de atitude (8_atitude_ekf_test/):
+%  MAG corrige o yaw; velocidade do GPS corrige o tilt — o que falta a uma
+%  estimativa só de IMU.
 %
 %  Cada log tem tempo absoluto independente (segundos desde boot da Pixhawk).
 %  Aqui, cada log é shiftado pra começar imediatamente após o anterior + GAP.
@@ -28,6 +32,9 @@ J.accX = []; J.accY = []; J.accZ = [];
 J.time_ATT  = []; J.roll = []; J.pitch = []; J.yaw = [];
 J.time_RCOU = []; J.pwm1 = []; J.pwm2 = []; J.pwm3 = []; J.pwm4 = [];
 J.time_RCIN = []; J.rc_roll = []; J.rc_pitch = []; J.rc_thr = []; J.rc_yaw = [];
+J.time_MAG = []; J.magX = []; J.magY = []; J.magZ = [];
+J.time_GPS = []; J.gps_vn = []; J.gps_ve = []; J.gps_vd = [];
+J.gps_spd = []; J.gps_gcrs = []; J.gps_nsats = [];
 
 boundaries = zeros(numel(LOGS)-1, 1);   % tempo (no eixo unificado) onde cada log termina
 log_starts = zeros(numel(LOGS), 1);     % onde cada log começa no eixo unificado
@@ -61,6 +68,34 @@ for i = 1:numel(LOGS)
         J.rc_pitch = [J.rc_pitch; L.rcin_pitch];
         J.rc_thr   = [J.rc_thr;   L.rcin_throttle];
         J.rc_yaw   = [J.rc_yaw;   L.rcin_yaw];
+    end
+
+    % MAG (magnetômetro) — lê o compass ATIVO direto do bruto.
+    % O load_log_data dá MAG_0 (compass 1), MAS neste drone o compass 1 está
+    % desligado (COMPASS_USE=0) e mal calibrado (|mag|~968 mGauss); o EKF usa o
+    % compass 2 = MAG_1 (externo, |mag|~374 mGauss, casa melhor com o ATT).
+    % read_mag_ prefere MAG_1 (fallback MAG_0 / load_log_data).
+    Mg = read_mag_(fullfile(LOG_DIR, LOGS{i}));
+    if isempty(Mg.time) && isfield(L,'time_MAG') && ~isempty(L.time_MAG)
+        Mg.time = L.time_MAG; Mg.x = L.magX; Mg.y = L.magY; Mg.z = L.magZ;
+    end
+    if ~isempty(Mg.time)
+        J.time_MAG = [J.time_MAG; Mg.time + t_shift];
+        J.magX = [J.magX; Mg.x]; J.magY = [J.magY; Mg.y]; J.magZ = [J.magZ; Mg.z];
+    end
+
+    % GPS (velocidade NED) — lido direto do arquivo bruto; só fixes 3D válidos.
+    % A posição absoluta NÃO é concatenada (cada log tem origem distinta), mas a
+    % velocidade é relativa ao frame NED local, então é concatenável.
+    Gp = read_gps_(fullfile(LOG_DIR, LOGS{i}));
+    if ~isempty(Gp.time)
+        J.time_GPS  = [J.time_GPS;  Gp.time + t_shift];
+        J.gps_vn    = [J.gps_vn;    Gp.vn];
+        J.gps_ve    = [J.gps_ve;    Gp.ve];
+        J.gps_vd    = [J.gps_vd;    Gp.vd];
+        J.gps_spd   = [J.gps_spd;   Gp.spd];
+        J.gps_gcrs  = [J.gps_gcrs;  Gp.gcrs];
+        J.gps_nsats = [J.gps_nsats; Gp.nsats];
     end
 
     % Avança cursor pro fim deste log + gap
@@ -98,7 +133,12 @@ L.pwm3_raw = J.pwm3; L.pwm4_raw = J.pwm4;
 L.time_RCIN = J.time_RCIN;
 L.rcin_roll = J.rc_roll; L.rcin_pitch = J.rc_pitch;
 L.rcin_throttle = J.rc_thr; L.rcin_yaw = J.rc_yaw;
-L.time_GPS = [];           % concat não preserva GPS (cada log tem origem distinta)
+% Magnetômetro (yaw) e GPS-velocidade (tilt) — para o EKF de atitude
+L.time_MAG = J.time_MAG;
+L.magX = J.magX; L.magY = J.magY; L.magZ = J.magZ;
+L.time_GPS = J.time_GPS;    % só velocidade (posição absoluta não é concatenável)
+L.gps_vn = J.gps_vn; L.gps_ve = J.gps_ve; L.gps_vd = J.gps_vd;
+L.gps_spd = J.gps_spd; L.gps_gcrs = J.gps_gcrs; L.gps_nsats = J.gps_nsats;
 L.boundaries = boundaries; % tempos onde cada log termina (no time-base unificado)
 L.log_starts = log_starts; % tempos onde cada log começa
 L.log_names  = LOGS;
@@ -188,6 +228,40 @@ plot(J.time_ATT, J.yaw, 'Color',[0.1 0.6 0.1]); grid on; mark_logs(); legend('Ya
 xlabel('Tempo unificado [s]');
 
 %% =========================================================================
+%  Fig 6 — MAG (magnetômetro) — alimenta o yaw do EKF
+%  =========================================================================
+if ~isempty(J.time_MAG)
+    figure('Color','w','Position',[80 80 1400 500]);
+    subplot(2,1,1); hold on; grid on;
+    plot(J.time_MAG, J.magX, 'r', 'DisplayName','MagX');
+    plot(J.time_MAG, J.magY, 'g', 'DisplayName','MagY');
+    plot(J.time_MAG, J.magZ, 'b', 'DisplayName','MagZ');
+    mark_logs(); ylabel('Campo [mGauss]'); legend('Location','best');
+    title('MAG — magnetômetro (referência de heading p/ o yaw)');
+    subplot(2,1,2); hold on; grid on;
+    plot(J.time_MAG, sqrt(J.magX.^2 + J.magY.^2 + J.magZ.^2), 'k');
+    mark_logs(); ylabel('|mag| [mGauss]'); xlabel('Tempo unificado [s]');
+    title('Norma do campo (deve ser ~constante se bem calibrado)');
+end
+
+%% =========================================================================
+%  Fig 7 — GPS (velocidade NED) — alimenta o tilt do EKF
+%  =========================================================================
+if ~isempty(J.time_GPS)
+    figure('Color','w','Position',[80 80 1400 500]);
+    subplot(2,1,1); hold on; grid on;
+    plot(J.time_GPS, J.gps_vn, 'r', 'DisplayName','V_N');
+    plot(J.time_GPS, J.gps_ve, 'g', 'DisplayName','V_E');
+    plot(J.time_GPS, J.gps_vd, 'b', 'DisplayName','V_D');
+    mark_logs(); ylabel('Velocidade [m/s]'); legend('Location','best');
+    title('GPS — velocidade NED (só trechos com fix 3D)');
+    subplot(2,1,2); hold on; grid on;
+    plot(J.time_GPS, J.gps_spd, 'k');
+    mark_logs(); ylabel('Speed [m/s]'); xlabel('Tempo unificado [s]');
+    title('GPS — velocidade horizontal');
+end
+
+%% =========================================================================
 %  Resumo
 %  =========================================================================
 fprintf('\n================== RESUMO LOGS CONCATENADOS ====================\n');
@@ -197,4 +271,60 @@ fprintf('IMU:  %d amostras  | dt_med=%.4f s\n', numel(J.time_IMU), median(diff(J
 fprintf('ATT:  %d amostras\n', numel(J.time_ATT));
 fprintf('RCOU: %d amostras\n', numel(J.time_RCOU));
 fprintf('RCIN: %d amostras\n', numel(J.time_RCIN));
+fprintf('MAG:  %d amostras\n', numel(J.time_MAG));
+fprintf('GPS:  %d amostras (velocidade NED, só fixes 3D)\n', numel(J.time_GPS));
 fprintf('===============================================================\n');
+
+
+%% ====================== Helper: leitura de GPS ======================
+function G = read_gps_(filename)
+%READ_GPS_  Lê velocidade do GPS de um log (formatos mp_export e legacy).
+%  Retorna só fixes 3D (Status>=3). Velocidade em NED [m/s].
+    G = struct('time',[],'vn',[],'ve',[],'vd',[],'spd',[],'gcrs',[],'nsats',[]);
+    info = whos('-file', filename);
+    nm = {info.name};
+    if any(strcmp(nm,'GPS_0'))            % mp_export (matriz)
+        S = load(filename,'GPS_0');  M = S.GPS_0;
+        % cols ArduPilot: TimeUS=2, Status=4, NSats=7, Spd=12, GCrs=13, VZ=14
+        t = double(M(:,2))/1e6; status = M(:,4); nsats = M(:,7);
+        spd = M(:,12); gcrs = M(:,13); vz = M(:,14);
+    elseif any(strcmp(nm,'GPS'))          % legacy (struct)
+        S = load(filename,'GPS');  g = S.GPS;
+        t = double(g.TimeUS)/1e6; status = double(g.Status);
+        if isfield(g,'NSats'), nsats = double(g.NSats); else, nsats = nan(size(t)); end
+        spd = double(g.Spd); gcrs = double(g.GCrs); vz = double(g.VZ);
+    else
+        return;                            % sem GPS neste log
+    end
+    ok = status >= 3;                      % só 3D fix (descarta logs sem satélite)
+    t=t(ok); spd=spd(ok); gcrs=gcrs(ok); vz=vz(ok); nsats=nsats(ok);
+    if isempty(t), return; end
+    [t, ia] = unique(t, 'stable');         % dedup defensivo de timestamps
+    spd=spd(ia); gcrs=gcrs(ia); vz=vz(ia); nsats=nsats(ia);
+    G.time  = t;
+    G.vn    = spd .* cosd(gcrs);           % VN = Spd*cos(curso)
+    G.ve    = spd .* sind(gcrs);           % VE = Spd*sin(curso)
+    G.vd    = vz;                          % VZ do ArduPilot (NED, +p/baixo — conferir sinal)
+    G.spd   = spd;  G.gcrs = gcrs;  G.nsats = nsats;
+end
+
+
+%% ====================== Helper: leitura de MAG ======================
+function Mg = read_mag_(filename)
+%READ_MAG_  Lê o magnetômetro ATIVO. Prefere MAG_1 (compass 2 externo, usado
+%  pelo EKF neste drone); fallback MAG_0. Formato mp_export (matriz).
+    Mg = struct('time',[],'x',[],'y',[],'z',[]);
+    info = whos('-file', filename);  nm = {info.name};
+    for c = {'MAG_1','MAG_0'}                 % preferência: compass 2 (externo/ativo)
+        if any(strcmp(nm, c{1}))
+            S = load(filename, c{1});  M = S.(c{1});
+            if isstruct(M), continue; end     % legacy struct: deixa o fallback cuidar
+            % cols mp_export: TimeUS=2, MagX=4, MagY=5, MagZ=6
+            t = double(M(:,2))/1e6;
+            [t, ia] = unique(t, 'stable');
+            Mg.time = t;
+            Mg.x = double(M(ia,4));  Mg.y = double(M(ia,5));  Mg.z = double(M(ia,6));
+            return;
+        end
+    end
+end

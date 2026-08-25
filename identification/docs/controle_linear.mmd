@@ -1,0 +1,42 @@
+%% Diagrama A — Controlador hierarquico no MODELO LINEAR (projeto)
+%% Estilo: Figura 4 de Hu et al., Drones 2024, 8, 93 (adaptado)
+flowchart LR
+    HSP["h_sp"]:::ref --> ALT
+    VHSP["v_horizontal_sp"]:::ref --> VEL
+    PSISP["psi_sp"]:::ref --> ACC
+
+    subgraph POS["POSITION CONTROLLER"]
+        direction LR
+        ALT["Altitude<br/>Control"]:::ctrl -->|v_vertical_sp| VEL["Velocity<br/>Control"]:::ctrl
+    end
+
+    VEL -->|a_sp| ACC["Acceleration<br/>and Yaw<br/>to Attitude"]:::conv
+    ACC -->|"Theta_sp (phi_c, theta_c)"| ATT
+    ACC -->|T| TM
+
+    subgraph ATTC["ATTITUDE CONTROLLER"]
+        direction LR
+        ATT["Attitude<br/>Control"]:::ctrl -->|omega_sp| RATE["Angular Rate<br/>Control"]:::ctrl
+    end
+
+    RATE -->|"tau_sp (Mx,My,Mz)"| TM["u = [T, Mx, My, Mz]"]:::sig
+
+    TM ==>|"entra DIRETO (sem alocacao)"| PLANT["PLANTA LINEAR<br/>xdot = A x + B u<br/>u = [T, Mx, My, Mz]<br/>(linearize.m)"]:::plant
+
+    PLANT --> ST["9 estados"]:::state
+
+    %% Realimentacoes
+    ST -. "h, v" .-> POS
+    ST -. "Theta" .-> ATT
+    ST -. "omega" .-> RATE
+
+    NOTE["MODELO LINEAR: a saida do controlador [T,M]<br/>entra DIRETO na planta. NAO ha Control Allocation<br/>(planta ja tem [T,M] como entrada).<br/>Aqui voce PROJETA/SINTONIZA o controlador."]:::note
+    NOTE -.-> TM
+
+    classDef ref fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef ctrl fill:#fff3e0,stroke:#e65100,color:#000
+    classDef conv fill:#ede7f6,stroke:#4527a0,color:#000
+    classDef plant fill:#e8f5e9,stroke:#2e7d32,color:#000
+    classDef state fill:#f3e5f5,stroke:#6a1b9a,color:#000
+    classDef sig fill:#fafafa,stroke:#555,color:#000
+    classDef note fill:#fffde7,stroke:#f9a825,color:#000

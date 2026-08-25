@@ -1,0 +1,122 @@
+DH (drone hibrido) - modo asa fixa
+#
+# Modelo AVL da aeronave DH, reconstruido a partir de:
+#   DeLucena2025 (Fig. 2 e Tabela I): S=0,27 m2, b=1,20 m, cr=0,25 m, ct=0,20 m,
+#       c_barra=0,226 m, AR=5,33, afilamento=0,8, perfil USA-35B,
+#       fuselagem 1,05 m x 0,14 m, empenagem em H com braco de 0,52 m
+#   relatorio FINEP 2: CG a 1/3 da corda media
+#
+# ATENCAO - EIXOS DO AVL: X para TRAS (jusante), Y para a DIREITA, Z para CIMA.
+#   NAO e o corpo FRD do modelo de identificacao (x frente, y direita, z baixo).
+#   Ao levar as derivadas para o FRD, p e r trocam de sinal; q nao.
+#
+# O que este modelo NAO inclui: fuselagem e hastes dos rotores (o AVL nao trata
+#   corpos rombudos de forma confiavel), o que subestima Cn_beta e o arrasto. Os
+#   rotores tambem nao entram: em asa fixa estao parados, e no pairado o AVL nao
+#   se aplica (V=0 torna as derivadas de taxa singulares).
+#
+#Mach
+ 0.0
+#
+#IYsym  IZsym  Zsym
+ 0      0      0.0
+#
+#Sref   Cref   Bref
+ 0.27   0.226  1.20
+#
+#Xref   Yref   Zref      (CG: 1/3 da corda media a partir do bordo de ataque)
+ 0.075  0.0    0.0
+#
+#CDp                     (arrasto parasita: fuselagem + hastes, nao modelados)
+ 0.030
+#
+#==============================================================
+SURFACE
+Asa
+#Nchord  Cspace   Nspan  Sspace
+ 8       1.0      16     1.0
+#
+YDUPLICATE
+ 0.0
+#
+ANGLE
+ 0.0
+#
+#--------------------------------------------------------------
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.0000  0.000  0.000   0.2500  0.000
+AFIL
+usa35b.dat
+#
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.0073  0.350  0.000   0.2208  0.000
+AFIL
+usa35b.dat
+CONTROL
+#nome     ganho  Xhinge   XYZhvec        SgnDup
+aileron   1.0    0.75     0.0 0.0 0.0    -1.0
+#
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.0125  0.600  0.000   0.2000  0.000
+AFIL
+usa35b.dat
+CONTROL
+aileron   1.0    0.75     0.0 0.0 0.0    -1.0
+#
+#==============================================================
+SURFACE
+Estabilizador horizontal
+#Nchord  Cspace   Nspan  Sspace
+ 6       1.0      10     1.0
+#
+YDUPLICATE
+ 0.0
+#
+ANGLE
+ 0.0
+#
+#--------------------------------------------------------------
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.5200  0.000  0.030   0.1700  0.000
+NACA
+0009
+CONTROL
+profundor 1.0    0.70     0.0 0.0 0.0     1.0
+#
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.5200  0.225  0.030   0.1700  0.000
+NACA
+0009
+CONTROL
+profundor 1.0    0.70     0.0 0.0 0.0     1.0
+#
+#==============================================================
+SURFACE
+Estabilizador vertical
+#Nchord  Cspace   Nspan  Sspace
+ 6       1.0      8      1.0
+#
+YDUPLICATE
+ 0.0
+#
+#--------------------------------------------------------------
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.5200  0.225  0.030   0.1700  0.000
+NACA
+0009
+CONTROL
+leme      1.0    0.70     0.0 0.0 1.0     1.0
+#
+SECTION
+#Xle     Yle    Zle     chord   angle
+ 0.5200  0.225  0.150   0.1700  0.000
+NACA
+0009
+CONTROL
+leme      1.0    0.70     0.0 0.0 1.0     1.0

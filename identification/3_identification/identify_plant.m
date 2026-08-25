@@ -1,4 +1,4 @@
-% identify_plant.m - VTOL multi-maneuver identification (24 params)
+% identify_plant.m - VTOL multi-maneuver identification (15 params)
 %
 % Localização: 3_identification/
 % Substitui o antigo new_identification.m.
@@ -32,37 +32,65 @@ paths = setup_paths();
 %   - '6 31-12-1979 21-00-00.bin-116760.mat'      → log novo
 %   - '7 31-12-1979 21-00-00.bin-113223.mat'      → log novo
 
-LOG_FILE = '4 25-05-2026 09-31-48.log-132954.mat';   % ◄── escolher aqui
+LOG_FILE = 'logs_concat.mat';   % ◄── escolher aqui
+
+% ---- CONFIGURAÇÃO EXTERNA (opcional) -------------------------------------
+% Se a variável de ambiente IDP_CFG_FILE apontar para um .mat contendo um
+% struct CFG, os campos dele SOBRESCREVEM os defaults deste bloco:
+%   CFG.LOG_FILE   nome do log em 1_data/
+%   CFG.t_trains   cell de janelas de treino     CFG.t_val  janela de validação
+%   CFG.AERO_FREE  struct de flags (ver seção 5) CFG.P0_aero  chute de P(16:22)
+%   CFG.tag        subpasta de saída em outputs/runs/<tag>/ e images/runs/<tag>/
+% Assim dá para rodar outra campanha de voo, ou uma variante do modelo, sem
+% editar o script (era o papel do make_diag.py, que gerava um clone do arquivo).
+CFG = struct();
+cfg_file = getenv('IDP_CFG_FILE');
+if ~isempty(cfg_file) && exist(cfg_file, 'file')
+    CFG = load(cfg_file);  if isfield(CFG,'CFG'), CFG = CFG.CFG; end
+    fprintf('  >>> CFG externo: %s\n', cfg_file);
+end
+if isfield(CFG,'LOG_FILE'), LOG_FILE = CFG.LOG_FILE; end
+% Campanha de voo: fixa a configuração da aeronave (CG, motores) para TODO o
+% processo, inclusive nas funções internas que chamam parameters() sem argumento.
+% Forma do amortecimento para esta rodada ('moment' | 'rate'), via override do
+% parameters(). Sem o campo, vale o default do parameters.m.
+if isfield(CFG,'damp_form')
+    setappdata(0,'damp_form_override', CFG.damp_form);  clear aero_gains
+    fprintf('  >>> Forma do amortecimento: %s\n', CFG.damp_form);
+end
+if isfield(CFG,'kv_thrust'),  setappdata(0,'kv_thrust', CFG.kv_thrust);  fprintf('  >>> k_v no empuxo: %.3f N/(m/s)\n', CFG.kv_thrust); end
+if isfield(CFG,'imu_rx'),     setappdata(0,'imu_rx_override', CFG.imu_rx); fprintf('  >>> r_x da IMU: %.3f m\n', CFG.imu_rx); end
+if isfield(CFG,'campaign')
+    parameters('campaign', CFG.campaign);
+    clear aero_gains          % o cache de aero_gains precisa reler a geometria
+    fprintf('  >>> Campanha: %s\n', CFG.campaign);
+end
 
 % Janelas (ATENÇÃO: t em segundos, alinhado com TimeUS do log escolhido)
 % Pro log "4 25-05-2026 09-31-48" (motores novos, voo entre 429-655 s):
-t_trains = {[473, 483]; ...
-            [428, 438];
-            [514, 524]};
+t_trains = {[4, 24]; ...
+            [25, 41]; ...
+            [42, 62]; ...
+            [63, 99]; ...
+            [100, 125]};
 % Janela de validação: usar 600-645s (voo principal, alta excitação de
 % yaw — diagnose_mz confirmou correlação 0.96 nessa janela com Mz_target).
 % A antiga 494-514 dava R² enganoso porque tem r oscilando só em ±0.1,
 % e erro DC pequeno do Mz vira drift visível integrado open-loop.
-t_val    = [473, 524];
+t_val    = [610, 630];   % (antes 605–625) — janela de validação oficial
+if isfield(CFG,'t_trains'), t_trains = CFG.t_trains(:); end
+if isfield(CFG,'t_val'),    t_val    = CFG.t_val(:)';   end
+RUN_TAG = '';  if isfield(CFG,'tag'), RUN_TAG = CFG.tag; end
 
 % Janelas pro log antigo (mantidas como referência — comente acima e descomente aqui):
 % t_trains = {[157, 167]; [167, 177]; [177, 187]};
 % t_val    = [147, 157];
 
 %% 2. Data loading and preprocessing (formato unificado via load_log_data.m)
-% =========================================================================
-% BLOCO ANTIGO (formato legacy struct, comentado — load_log_data trata os 2)
-% -------------------------------------------------------------------------
-% load(fullfile(paths.data, 'log_data.mat'))
-% ATT.TimeS  = double(ATT.TimeUS) / 1e6;
-% IMU.TimeS  = double(IMU.TimeUS) / 1e6;
-% RCOU.TimeS = double(RCOU.TimeUS) / 1e6;
-% GPS.TimeS  = double(GPS.TimeUS) / 1e6;
-% idx = IMU.I == 0;
-% gyrX_raw = IMU.GyrX(idx); ... etc
-% =========================================================================
 
-L = load_log_data(fullfile(paths.data, LOG_FILE));
+log_path = LOG_FILE;                                   % aceita caminho absoluto
+if ~exist(log_path, 'file'), log_path = fullfile(paths.data, LOG_FILE); end
+L = load_log_data(log_path);
 
 % Extrai variáveis do struct uniforme L (compatibilidade com código abaixo)
 time_IMU = L.time_IMU;   time_ATT = L.time_ATT;   time_RCOU = L.time_RCOU;
@@ -72,12 +100,11 @@ pwm1_raw = L.pwm1_raw;   pwm2_raw = L.pwm2_raw;
 pwm3_raw = L.pwm3_raw;   pwm4_raw = L.pwm4_raw;
 
 % Grade comum de tempo (dt=0.1 s, igual antes)
+% NÃO incluir GPS aqui: ele não é usado na identificação rotacional (pqr/acc)
+% e no logs_concat o GPS termina em 268s enquanto IMU/ATT/RCOU vão até ~749s.
+% Incluí-lo truncava a grade em 268s e barrava janelas válidas (ex.: 455-465).
 all_starts = [min(time_IMU), min(time_ATT), min(time_RCOU)];
 all_ends   = [max(time_IMU), max(time_ATT), max(time_RCOU)];
-if ~isempty(L.time_GPS)
-    all_starts(end+1) = min(L.time_GPS);
-    all_ends(end+1)   = max(L.time_GPS);
-end
 t_start  = max(all_starts);
 t_end    = min(all_ends);
 t_common = t_start:0.1:t_end;
@@ -97,6 +124,37 @@ pwm2_interp = interp1(time_RCOU, pwm2_raw, t_common, 'linear');
 pwm3_interp = interp1(time_RCOU, pwm3_raw, t_common, 'linear');
 pwm4_interp = interp1(time_RCOU, pwm4_raw, t_common, 'linear');
 
+% ---- CADEIA DE ATUAÇÃO ÚNICA (2_model/motor_chain.m) ----------------------
+% PWM(log) → atraso puro (parameters().motor.delay_s) → RPM_ss = CR·PWM+Ω_b →
+% lag de 1ª ordem τ_m (solução exata p/ entrada linear por partes) → RPM.
+% Daqui em diante os arrays "pwm*_interp" passam a conter RPM já atrasada e
+% lagada, e func_T_ref/func_Q_ref agem sobre RPM (T = kT_rpm·RPM²). É a mesma
+% cadeia usada em sim_window / results_id_figures / compare_*, portanto a
+% validação vê exatamente o mesmo motor que a identificação.
+% (Histórico: DELAY_PWM=1 + filtro discreto a 10 Hz + empuxo constante por passo
+%  → substituído; ver identify_plant_prelag_backup.m.txt e outputs/diag/*.)
+[rpm_lag, func_T_ref, func_Q_ref, mc_info] = motor_chain(t_common(:), ...
+    [pwm1_interp(:), pwm2_interp(:), pwm3_interp(:), pwm4_interp(:)]);
+pwm1_interp = rpm_lag(:,1)';  pwm2_interp = rpm_lag(:,2)';
+pwm3_interp = rpm_lag(:,3)';  pwm4_interp = rpm_lag(:,4)';
+fprintf('  >>> motor_chain: atraso %.2f s (%d amostra) | lag τ_m = %.3f s | T = kT·RPM²\n', ...
+    mc_info.delay_s, mc_info.delay_n, mc_info.tau_m);
+DELAY_PWM = mc_info.delay_n;   % mantido só para logs/plots que o citam
+USE_MOTOR_MODEL = true;        % idem (compatibilidade)
+
+% ---- VELOCIDADE ESTIMADA (escala a aerodinâmica da estrutura, P(17:22)) ----
+% Sem GPS utilizável no ginásio: EKF VD (barômetro) + integração ancorada da
+% aceleração quase-estática de atitude e empuxo (5_validation/estimate_velocity.m).
+% É EXÓGENA (não é estado do modelo), e a MESMA série vai para o custo EEM, para
+% o custo OEM e para a simulação de validação (appdata 'aero_vel' lido pelo
+% vtol_dynamics), de modo que identificação e validação veem o mesmo V(t).
+VEst = estimate_velocity(L, t_common(:));
+V_grid = VEst.V;  v_grid = VEst.v;  w_grid = VEst.w;
+V_grid(~isfinite(V_grid)) = 0;  v_grid(~isfinite(v_grid)) = 0;  w_grid(~isfinite(w_grid)) = 0;
+setappdata(0, 'aero_vel', struct('t', t_common(:), 'V', V_grid, 'v', v_grid, 'w', w_grid));
+fprintf('  >>> V estimada: média %.2f | p95 %.2f | máx %.2f m/s (escala P(17:22))\n', ...
+    mean(V_grid), prctile(V_grid,95), max(V_grid));
+
 % Sanity check: as janelas escolhidas estão dentro do log?
 log_t_min = t_common(1);  log_t_max = t_common(end);
 for s = 1:numel(t_trains)
@@ -112,8 +170,7 @@ end
 fprintf('  Log "%s": t = %.1f a %.1f s (%s)\n', ...
     LOG_FILE, log_t_min, log_t_max, L.format);
 
-%% 3. Motor reference models (motor_models.m centraliza a tabela de bancada)
-[func_T_ref, func_Q_ref] = motor_models();
+%% 3. Motor reference models → definidos por motor_chain (T = kT_rpm·RPM², Q = kQ_rpm·RPM²)
 
 %% 4. Extract training segments
 n_seg = length(t_trains);
@@ -121,6 +178,7 @@ segs = cell(n_seg, 1);
 
 fprintf('\n  Segmentos de treino: %d\n', n_seg);
 for s = 1:n_seg
+    seg = struct();   % zera (evita herdar tipo de variável 'seg' do workspace, ex.: cell do identify_v2)
     idx_s = (t_common >= t_trains{s}(1)) & (t_common <= t_trains{s}(2));
     seg.time = t_common(idx_s)';
     seg.N    = sum(idx_s);
@@ -130,6 +188,7 @@ for s = 1:n_seg
     seg.acc  = [accX_interp(idx_s)', accY_interp(idx_s)', accZ_interp(idx_s)'];
     seg.att  = [roll_interp(idx_s)', pitch_interp(idx_s)', yaw_interp(idx_s)'];
     seg.att_rad = deg2rad(seg.att);
+    seg.V = V_grid(idx_s);  seg.v = v_grid(idx_s);  seg.w = w_grid(idx_s);
     seg.T_ref = zeros(seg.N, 4);
     seg.Q_ref = zeros(seg.N, 4);
     for j = 1:4
@@ -165,43 +224,98 @@ lb = proj_params.bounds.lb;
 ub = proj_params.bounds.ub;
 param_names = proj_params.param_names;
 
-n_params = 15;
-n_rot = 15;  % EEM otimiza P(1:15) — modelo é PURAMENTE rotacional (J, k_T, k_Q, D)
+n_params = numel(P0);          % 22 no modelo estendido (15 rotacionais + 7 aerodinâmicos)
+n_rot    = proj_params.n_rot_only;   % 15 — bloco puramente rotacional (J, k_T, k_Q, D)
 
-% ╔══════════════════════════════════════════════════════════════════╗
-% ║  FLAGS de "trava" — força certos parâmetros a valor fixo         ║
-% ║  (lb == ub == valor → lsqnonlin não otimiza esse parâmetro)      ║
-% ╚══════════════════════════════════════════════════════════════════╝
-LOCK_MOTORS = false;   % se true: trava k_T/k_Q em 1.0; se false: deixa
-                       % variar dentro de [0.40, 1.40] (definido em parameters.m)
+% ---- QUAIS COEFICIENTES AERODINÂMICOS FICAM LIVRES --------------------------
+% Decidido pelo 3_identification/identifiability_check.m (Jacobiano em Θ₀, EEM):
+% no envelope voado (V p95 ≈ 1,3 m/s) as cotas de Cramér-Rao em Θ₀ dão
+%   Cl_p 33% | Cl_β 61% | Cm_q 58% | Cm_α 64% | Cn_r 306% | Cn_β 21%
+% e as correlações rotor↔estrutura ρ(D_p,Cl_p)=0,53, ρ(D_q,Cm_q)=0,79,
+% ρ(D_r,Cn_r)=0,85. Ou seja: guinada não separa amortecimento de rotor do
+% aerodinâmico (canal fraco, r pequeno), então Cn_r fica TRAVADO no valor da AVL.
+% Os demais ficam livres. C_d entra pelo canal translacional (acelerômetro).
+% Ponha todos em true para o teste "aerodinâmica totalmente livre".
+% DEFAULT: todos TRAVADOS nos valores da AVL. Liberá-los foi testado e é
+% sobreajuste (runs/aero_free_2026: rolagem sobe para 0,80 e arfagem cai para
+% 0,52, com C_lp e C_mq indo a zero e C_mα a 4× a AVL). Travados, eles entram
+% como física sem grau de liberdade novo e melhoram a guinada de 0,73 para 0,81.
+AERO_FREE = struct('C_d', false, 'Cl_p', false, 'Cl_b', false, ...
+                   'Cm_q', false, 'Cm_a', false, 'Cn_r', false, 'Cn_b', false);
+if isfield(CFG,'AERO_FREE'), AERO_FREE = CFG.AERO_FREE; end
+if isfield(CFG,'P0_aero'),   P0(16:22) = CFG.P0_aero(:); end
+% Rotor, momento por velocidade P(23:25) = L_v, M_w, N_v: default TRAVADOS em 0.
+% CFG.rotvel_free = true libera (teste NASA C_lv, C_mw, C_nv).
+if ~(isfield(CFG,'rotvel_free') && CFG.rotvel_free)
+    lb(23:25) = P0(23:25);  ub(23:25) = P0(23:25);
+end
+% Forma do Hu et al. (2024): P(23:25) = c_l, c_m, c_n, termo −½ρV²S·(b,c̄,b)·c.
+% Substitui os seis coeficientes de asa P(17:22), que ficam zerados.
+if isfield(CFG,'hu_form') && CFG.hu_form
+    setappdata(0,'hu_form',true);
+    P0(17:22) = 0;  lb(17:22) = 0;  ub(17:22) = 0;
+    lb(23:25) = -2;  ub(23:25) = 2;
+    fprintf('  >>> Forma do Hu: c_l, c_m, c_n livres; asa P(17:22) zerada\n');
+else
+    if isappdata(0,'hu_form'), rmappdata(0,'hu_form'); end
+end
+aero_map = {'C_d',16; 'Cl_p',17; 'Cl_b',18; 'Cm_q',19; 'Cm_a',20; 'Cn_r',21; 'Cn_b',22};
+for a = 1:size(aero_map,1)
+    ia = aero_map{a,2};
+    if ~AERO_FREE.(aero_map{a,1}), lb(ia) = P0(ia);  ub(ia) = P0(ia); end
+end
+fprintf('  >>> Aerodinâmicos livres: %s | travados: %s\n', ...
+    strjoin(aero_map(cellfun(@(n) AERO_FREE.(n), aero_map(:,1)),1), ', '), ...
+    strjoin(aero_map(cellfun(@(n) ~AERO_FREE.(n), aero_map(:,1)),1), ', '));
 
-% Regularização de pares de motores (resolve identifiability)
-%   Em yaw, r_dot só depende de Q1+Q2-Q3-Q4 → individual k_Q não é único.
-%   Penaliza diferença DENTRO de cada par CW/CCW (M1+M2, M3+M4).
-%
-%   Escala do data fit: ~1500 resíduos × magnitude ~1 = Σ(e_dyn)² ~1500.
-%   Pra reg ser comparável: λ * 4 * (Δk_típico)² ≈ 1500. Com Δk~1, λ ≈ 400.
-%
-%   Guia:
-%     λ = 1     → peso ~0.5% do data fit (nada)
-%     λ = 100   → peso ~50% do data fit (motores ficam próximos)
-%     λ = 1000  → peso ~500% (praticamente trava motores do par iguais)
-%     λ = 1e4   → trava forte (use se ainda escapar com 1000)
+% FLAGS de "trava": lb==ub==valor → lsqnonlin não otimiza o parâmetro.
+LOCK_MOTORS = false;   % true: trava k_T/k_Q=1.0 | false: livre [0.40,1.40]
+
+% Regularização de pares CW/CCW (identifiability): yaw só vê Q1+Q2-Q3-Q4, logo
+% k_Q individual não é único → penaliza a diferença dentro do par (M1+M2, M3+M4).
+% Guia de λ: 1≈0%, 100≈50%, 1000≈trava do peso do data fit.
 REG_LAMBDA.kt_pair = 100;   % penaliza |k_T1-k_T2| e |k_T3-k_T4|
 REG_LAMBDA.kq_pair = 100;   % penaliza |k_Q1-k_Q2| e |k_Q3-k_Q4|
+% Restrição física: desigualdade triangular dos momentos de inércia
+%   (Jz≤Jx+Jy, Jy≤Jx+Jz, Jx≤Jy+Jz). One-sided: só pune violação.
+%   Necessária porque a folga triangular do CAD é ~1.2% e yaw é inobservável.
+REG_LAMBDA.tri = 1e4;       % grande → optimizer nunca sai do físico
 
-% Modo de cost function — controla quais sinais entram no resíduo:
-%   'rotational' → SÓ p, q, r (ignora acc/translacional)
-%                  Útil quando translacional tem problema estrutural
-%                  (massa errada, bench T_ref off, drag não modelado, etc).
-%                  PROBLEMA: k_T fica solto em magnitude (rot só vê razões
-%                  via momentos assimétricos). Resultado: AccZ_sim diverge
-%                  de AccZ_IMU em ~20% em hover.
-%   'translational' → SÓ acc (ignora pqr) — pra calibrar IMU offset isolado
-%   'full' → tudo (default). k_T é ancorado pelo AccZ ≈ -g em hover.
-%            Recomendado AGORA que drag/Bz foram removidos e accelerometer
-%            é um modelo limpo (só thrust + IMU offset).
+% Modo do custo (quais sinais no resíduo):
+%   'rotational' → só p,q,r (k_T solto em magnitude → AccZ diverge ~20% no hover)
+%   'translational' → só acc (calibra IMU offset isolado)
+%   'full' → tudo (default); k_T ancorado por AccZ≈-g no hover.
 COST_MODE = 'full';
+if isfield(CFG,'COST_MODE'), COST_MODE = CFG.COST_MODE; end
+% Limites de k_T por campanha: os motores de fev/2024 não são os de 2026 e a
+% curva de bancada disponível é a dos novos, logo k_T precisa de faixa maior
+% para absorver a diferença de escala de empuxo.
+if isfield(CFG,'kT_bounds'), lb(5:8) = CFG.kT_bounds(1); ub(5:8) = CFG.kT_bounds(2); end
+if isfield(CFG,'kQ_bounds'), lb(9:12) = CFG.kQ_bounds(1); ub(9:12) = CFG.kQ_bounds(2); end
+% Amortecimento: chute e trava. Serve para testar se os valores FÍSICOS
+% (2_model/damping_budget.m) sustentam a validação tão bem quanto os efetivos.
+if isfield(CFG,'P0_damp'), P0(13:15) = CFG.P0_damp(:); end
+if isfield(CFG,'lock_damp') && CFG.lock_damp
+    lb(13:15) = P0(13:15);  ub(13:15) = P0(13:15);
+    fprintf('  >>> c_p, c_q, c_r TRAVADOS em [%.3f %.3f %.3f]\n', P0(13:15));
+end
+% Limites dos aerodinâmicos: quando c_p, c_q, c_r são zerados, os termos ∝ V
+% precisam de faixa muito maior para tentar substituí-los.
+% J_xz livre: ele é quem dita Γ4, e portanto a intensidade do acoplamento
+% cruzado da forma de momento. Travado no CAD ele tem CR de 74%.
+% Limites do amortecimento: dependem da FORMA (N·m·s na de momento, 1/s na de taxa)
+if isfield(CFG,'damp_bounds')
+    lb(13:15) = CFG.damp_bounds(:,1);  ub(13:15) = CFG.damp_bounds(:,2);
+end
+if isfield(CFG,'Jxz_bounds'), lb(4) = CFG.Jxz_bounds(1); ub(4) = CFG.Jxz_bounds(2); end
+if isfield(CFG,'Jz_bounds'),  lb(3) = CFG.Jz_bounds(1);  ub(3) = CFG.Jz_bounds(2);  end
+if isfield(CFG,'aero_bounds')
+    lb(16:22) = CFG.aero_bounds(:,1);  ub(16:22) = CFG.aero_bounds(:,2);
+end
+if isfield(CFG,'J_bounds')                       % fator multiplicativo sobre o CAD
+    lb(1:2) = proj_params.P0_J(1:2)*CFG.J_bounds(1);
+    ub(1:2) = proj_params.P0_J(1:2)*CFG.J_bounds(2);
+end
 
 if LOCK_MOTORS
     P0(5:12) = 1.0;
@@ -222,7 +336,13 @@ ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);  % Mesmo que Simulink
 
 % Criar pasta de imagens se não existir (centralizado em outputs/images/)
 img_dir = paths.images;
+out_dir = paths.outputs;
+if ~isempty(RUN_TAG)
+    img_dir = fullfile(paths.images, 'runs', RUN_TAG);
+    out_dir = fullfile(paths.outputs, 'runs', RUN_TAG);
+end
 if ~exist(img_dir, 'dir'), mkdir(img_dir); end
+if ~exist(out_dir, 'dir'), mkdir(out_dir); end
 
 %% ========================================================================
 %  6. VALIDAÇÃO COM CHUTE INICIAL (P0) - primeiro segmento + validação
@@ -259,7 +379,7 @@ fprintf('  Braços (de parameters.m): Lx_r=%.6f  Lx_l=%.6f  Ly_f=%.6f  Ly_r=%.6f
 % Derivadas no instante t=0 (para comparação pontual com Simulink)
 t0 = seg1.time(1);
 y0_rot = seg1.pqr(1,:)';
-dy0 = vtol_dynamics(t0, y0_rot, P0, seg1.time, seg1.pwm, func_T_ref, func_Q_ref);
+dy0 = vtol_dynamics(t0, y0_rot, P0, seg1.time, seg1.pwm, func_T_ref, func_Q_ref, constants_sim);
 pwm0 = seg1.pwm(1,:);
 T0 = diag_P(5:8)' .* [func_T_ref(pwm0(1)), func_T_ref(pwm0(2)), func_T_ref(pwm0(3)), func_T_ref(pwm0(4))];
 Q0 = diag_P(9:12)' .* [func_Q_ref(pwm0(1)), func_Q_ref(pwm0(2)), func_Q_ref(pwm0(3)), func_Q_ref(pwm0(4))];
@@ -299,9 +419,11 @@ smooth_win = 5;
 p_all = []; q_all = []; r_all = [];
 pd_all = []; qd_all = []; rd_all = [];
 Tr_all = []; Qr_all = [];
+V_all = []; vb_all = []; wb_all = [];
 
 for s = 1:n_seg
     sg = segs{s};
+    V_all = [V_all; sg.V(:)]; vb_all = [vb_all; sg.v(:)]; wb_all = [wb_all; sg.w(:)]; %#ok<AGROW>
     p_s = sg.pqr(:,1); q_s = sg.pqr(:,2); r_s = sg.pqr(:,3);
     p_all = [p_all; p_s]; %#ok<AGROW>
     q_all = [q_all; q_s]; %#ok<AGROW>
@@ -318,8 +440,13 @@ var_qd = var(qd_all); if var_qd < 1e-12, var_qd = 1; end
 var_rd = var(rd_all); if var_rd < 1e-12, var_rd = 1; end
 weights_eem = [1/var_pd; 1/var_qd; 1/var_rd];
 
-cost_eem = @(Prot) eem_cost_function(ones(n_rot,1), Prot, weights_eem, ...
-    p_all, q_all, r_all, pd_all, qd_all, rd_all, Tr_all, Qr_all, REG_LAMBDA);
+aero_eem = struct('V', V_all, 'v', vb_all, 'w', wb_all);
+cost_eem = @(Pv) eem_cost_function(ones(n_params,1), Pv, weights_eem, ...
+    p_all, q_all, r_all, pd_all, qd_all, rd_all, Tr_all, Qr_all, REG_LAMBDA, aero_eem);
+
+% O EEM vê momentos, não forças: C_d (P16) fica travado nesta fase e só é
+% identificado no OEM, pelo resíduo do acelerômetro.
+lb_eem = lb;  ub_eem = ub;  lb_eem(16) = P0(16);  ub_eem(16) = P0(16);
 
 opts_eem = optimoptions('lsqnonlin', ...
     'Algorithm', 'trust-region-reflective', ...
@@ -329,14 +456,14 @@ opts_eem = optimoptions('lsqnonlin', ...
     'StepTolerance', 1e-14, ...
     'FunctionTolerance', 1e-14);
 
-[P_eem_rot, rn_eem, ~, ef_eem] = lsqnonlin(cost_eem, P0(1:n_rot), lb(1:n_rot), ub(1:n_rot), opts_eem);
-P_eem = [P_eem_rot; P0(n_rot+1:n_params)];
+[P_eem, rn_eem, ~, ef_eem] = lsqnonlin(cost_eem, P0, lb_eem, ub_eem, opts_eem);
+P_eem_rot = P_eem;   % (nome legado usado nos prints abaixo)
 
 fprintf('\n  EEM Resnorm: %.4f  |  Exit flag: %d\n', rn_eem, ef_eem);
 
 % Breakdown reg vs data — pra calibrar λ
 e_eem_final = cost_eem(P_eem_rot);
-n_reg = 4;  % 4 resíduos de regularização (kt12, kt34, kq12, kq34)
+n_reg = 7;  % 4 pares (kt12,kt34,kq12,kq34) + 3 triangulares (inércia)
 rn_data = sum(e_eem_final(1:end-n_reg).^2);
 rn_reg  = sum(e_eem_final(end-n_reg+1:end).^2);
 fprintf('  Breakdown: data=%.4f  reg=%.4f  (reg/data = %.2f%%)\n', ...
@@ -347,12 +474,12 @@ fprintf('  k_T par: [%.3f,%.3f] vs [%.3f,%.3f]   Δ=%.3f,%.3f\n', ...
 fprintf('  k_Q par: [%.3f,%.3f] vs [%.3f,%.3f]   Δ=%.3f,%.3f\n', ...
     P_eem_rot(9), P_eem_rot(10), P_eem_rot(11), P_eem_rot(12), ...
     P_eem_rot(9)-P_eem_rot(10), P_eem_rot(11)-P_eem_rot(12));
-for i = 1:n_rot
+for i = 1:n_params
     fprintf('    %-6s: %12.6f  (chute: %12.6f)\n', param_names{i}, P_eem(i), P0(i));
 end
 
 %% ========================================================================
-%  8. FASE B: OEM Progressivo Multi-Segmento (1s → 2s → 5s → full)
+%  8. FASE B: OEM Progressivo Multi-Segmento (1s → 2s → 3s → 5s → 10s → 20s)
 %  ========================================================================
 
 % Pesos OEM: computados sobre dados concatenados de todos os segmentos
@@ -369,7 +496,13 @@ var_ay = var(acc_cat(:,2)); if var_ay < 1e-12, var_ay = 1; end
 var_az = var(acc_cat(:,3)); if var_az < 1e-12, var_az = 1; end
 weights_acc = [1/var_ax; 1/var_ay; 1/var_az];
 
-win_durations = [1.0, 2.0, 3.0];
+% Multijanelamento (multiple shooting): cada estágio reinicia a integração a
+% cada win_sec segundos, usando o estado medido. Janela curta perdoa erro de
+% fase e pesa o transitório; janela longa cobra o comportamento acumulado e é
+% mais sensível a erro de ganho e a viés. Percorrer de 1 a 20 s dá vistas
+% diferentes do mesmo dado, e o estágio vencedor é escolhido pelo R² médio.
+win_durations = [1.0, 2.0, 3.0, 5.0, 10.0, 20.0];
+if isfield(CFG,'win_durations'), win_durations = CFG.win_durations(:)'; end
 P_current = P_eem;
 best_R2_mean = -Inf;
 P_best = P_eem;
@@ -451,10 +584,66 @@ fprintf('    G5=%8.4f  G6=%8.4f  G7=%8.4f  G8=%8.4f  InvJy=%8.4f\n', ...
     Jx_f/gam0_f, 1/Jy_f);
 
 %% ========================================================================
+%  8a. QUALIDADE DOS PARÂMETROS — erro-padrão via Jacobiano (≈ Cramér-Rao)
+%  Cov(P) ≈ σ²·(JᵀJ)⁻¹,  σ² = resnorm/(N−p).  std% alto = parâmetro pouco
+%  observável (ex.: Jz com yaw fraco). Fecha a história da identifiabilidade.
+%  ========================================================================
+try
+    cost_se = @(P) oem_multi_seg_cost(P, segs, Inf, ...
+        constants_sim.m, constants_sim.g, dt, weights_pqr, weights_acc, ...
+        COST_MODE, REG_LAMBDA);
+    opts_se = optimoptions('lsqnonlin', 'Display','off', ...
+        'MaxIterations',0, 'MaxFunctionEvaluations',1);
+    [~, rn_se, res_se, ~, ~, ~, Jse] = lsqnonlin(cost_se, P_final, lb, ub, opts_se);
+    Nres  = numel(res_se);
+    dof   = max(Nres - n_params, 1);
+    sig2  = rn_se / dof;
+    Cov   = sig2 * pinv(full(Jse' * Jse));
+    se    = sqrt(max(diag(Cov), 0));
+    at_lb = abs(P_final(:) - lb(:)) <= 1e-6*max(abs(lb(:)),1);
+    at_ub = abs(P_final(:) - ub(:)) <= 1e-6*max(abs(ub(:)),1);
+    fprintf('\n  --- Qualidade dos parâmetros (erro-padrão ≈ Cramér-Rao) ---\n');
+    fprintf('  %-6s %12s %12s %9s   obs\n', 'param', 'valor', 'std', 'std%%');
+    for i = 1:n_params
+        relse = 100*se(i) / max(abs(P_final(i)), 1e-9);
+        if     at_ub(i), tag = '[no UB]';
+        elseif at_lb(i), tag = '[no LB]';
+        elseif relse > 50, tag = '<< MAL identificado';
+        elseif relse > 20, tag = '[CRB>20%% — Sato FALHA]';
+        else,  tag = '[CRB ok]';     % Sato: erro-padrao < 20%%
+        end
+        fprintf('  %-6s %12.6f %12.6f %8.1f%%   %s\n', ...
+            param_names{i}, P_final(i), se(i), relse, tag);
+    end
+    fprintf('  (Sato: CRB<20%% = bem identificado. std%% alto/"no LB/UB" = pouco\n');
+    fprintf('   observável — tipicamente yaw→Jz/k_Q/Jxz/Dr)\n');
+
+    % --- Viabilidade física: desigualdade triangular dos momentos de inércia ---
+    %  Jz<=Jx+Jy (e permutações) DEVE valer para QUALQUER corpo rígido. Se violar,
+    %  o "modelo" não corresponde a nenhum tensor de inércia físico.
+    Jxv=P_final(1); Jyv=P_final(2); Jzv=P_final(3);
+    tri = [Jzv, Jxv+Jyv; Jyv, Jxv+Jzv; Jxv, Jyv+Jzv];
+    nm  = {'Jz<=Jx+Jy','Jy<=Jx+Jz','Jx<=Jy+Jz'};
+    fprintf('\n  --- Viabilidade física (desigualdade triangular) ---\n');
+    for i = 1:3
+        folga = 100*(tri(i,2)-tri(i,1))/max(tri(i,1),1e-9);
+        if tri(i,1) <= tri(i,2)
+            fprintf('   %-11s  %.4f <= %.4f   folga %+5.1f%%   OK\n', ...
+                nm{i}, tri(i,1), tri(i,2), folga);
+        else
+            fprintf('   %-11s  %.4f  > %.4f   folga %+5.1f%%   VIOLA <<<\n', ...
+                nm{i}, tri(i,1), tri(i,2), folga);
+        end
+    end
+catch ME_se
+    fprintf('\n  (erro-padrão não calculado: %s)\n', ME_se.message);
+end
+
+%% ========================================================================
 %  8b. EXPORTAR PARÂMETROS PARA simulate.m
 %  ========================================================================
-params_file = fullfile(paths.outputs, 'P_identified.mat');
-save(params_file, 'P_final', 'P0', 'param_names');
+params_file = fullfile(out_dir, 'P_identified.mat');
+save(params_file, 'P_final', 'P0', 'param_names', 'P_eem', 'LOG_FILE', 't_trains', 't_val', 'AERO_FREE');
 fprintf('\n  Parâmetros exportados para: %s\n', params_file);
 
 %% ========================================================================
@@ -471,6 +660,19 @@ sg = segs{1};
 
 print_R2('P_final', res_final, sg.pqr, pqr_vl, sg.acc, acc_vl, ...
     t_trains{1}, t_val, R2_func);
+
+% Resumo comparável entre rodadas (outputs/runs/<tag>/summary.mat)
+summary = struct('tag', RUN_TAG, 'log', LOG_FILE, 't_val', t_val, ...
+    'P_final', P_final, 'P0', P0, 'P_eem', P_eem, 'param_names', {param_names}, ...
+    'AERO_FREE', AERO_FREE, 'V_p95', prctile(V_grid,95), 'V_max', max(V_grid));
+summary.R2_val = [R2_func(pqr_vl(:,1), res_final.p_s_vl), ...
+                  R2_func(pqr_vl(:,2), res_final.q_s_vl), ...
+                  R2_func(pqr_vl(:,3), res_final.r_s_vl)];
+summary.R2_acc = [R2_func(acc_vl(:,1), res_final.accX_s_vl), ...
+                  R2_func(acc_vl(:,2), res_final.accY_s_vl), ...
+                  R2_func(acc_vl(:,3), res_final.accZ_s_vl)];
+try, summary.CR_pct = 100*se(:)'./max(abs(P_final(:)'),1e-9); catch, end
+save(fullfile(out_dir,'summary.mat'), 'summary');
 
 plot_all_results('P_final', ...
     res_final, sg.time, sg.pqr, sg.acc, time_vl, pqr_vl, acc_vl, R2_func, t_trains{1}, t_val, att_vl);
@@ -520,6 +722,36 @@ print_R2('P_final (hibrido)', res_hyb_final, sg.pqr, pqr_vl, sg.acc, acc_vl, ...
 plot_all_results('P_final (hibrido)', ...
     res_hyb_final, sg.time, sg.pqr, sg.acc, time_vl, pqr_vl, acc_vl, R2_func, t_trains{1}, t_val, att_vl);
 
+%% ========================================================================
+%  9d. TESTE DE BRANCURA DO RESÍDUO (taxas, validação híbrida)
+%  Resíduo BRANCO (ACF dentro das bandas 95%, exceto lag 0) ⇒ erro irredutível
+%  → modelo no limite dos dados. COLORIDO (ACF estoura em lags>0) ⇒ dinâmica
+%  não modelada (aero de rotor, lag de motor, asa...) → ainda melhorável.
+%  Mesmo teste/figura do identify_v2, sobre a validação híbrida (rotacional puro).
+%  ========================================================================
+fprintf('\n--- Teste de brancura do resíduo (taxas, híbrido) ---\n');
+maxlag_w = 30;
+ewn = {'p', pqr_vl(:,1)-res_hyb_final.p_s_vl; ...
+       'q', pqr_vl(:,2)-res_hyb_final.q_s_vl; ...
+       'r', pqr_vl(:,3)-res_hyb_final.r_s_vl};
+figW = figure('Name','identify_plant brancura','Position',[80 80 1100 700]);
+for cW = 1:3
+    eW = ewn{cW,2};
+    [acfW, lagsW] = acf_white(eW, maxlag_w);
+    NW = numel(eW);  bW = 1.96/sqrt(NW);
+    insideW = mean(abs(acfW(2:end)) <= bW) * 100;
+    if insideW >= 90, verdictW = '~BRANCO (irredutível)'; else, verdictW = 'COLORIDO (sobra dinâmica)'; end
+    fprintf('  %-3s: %3.0f%% dos lags dentro de ±%.3f (95%%)  → %s\n', ewn{cW,1}, insideW, bW, verdictW);
+    subplot(3,1,cW); hold on; grid on;
+    stem(lagsW(2:end), acfW(2:end), 'filled', 'MarkerSize', 3);
+    yline(bW,'r--'); yline(-bW,'r--');
+    ylabel(['ACF ' ewn{cW,1}]); ylim([-0.5 0.5]);
+    if cW==1, title(sprintf('Brancura do resíduo [%g-%gs] — dentro das bandas = branco', t_val(1), t_val(2))); end
+    if cW==3, xlabel('lag (amostras)'); end
+end
+saveas(figW, fullfile(img_dir,'identify_plant_whiteness.png'));
+fprintf('  (≥90%% dentro da banda ≈ branco. Figura: %s)\n', fullfile(img_dir,'identify_plant_whiteness.png'));
+
 %% 10. RESUMO FINAL: P0 vs P_final (apenas validação)
 fprintf('\n==========================================================\n');
 fprintf('  RESUMO FINAL — Validação (%d-%ds)\n', t_val(1), t_val(2));
@@ -559,6 +791,28 @@ disp('Script finalizado.');
 %  FUNÇÕES LOCAIS
 %  ========================================================================
 
+function [aX, aY, aZ] = accel_eval(p, q, r, u, v, w, pwm, k_T, func_T_ref, m, r_imu, dt, kdm_P)
+%ACCEL_EVAL  Força específica da IMU (modelo de sensor), unificando o bloco antes
+%  repetido nas simulate_*: T=Σ k_T·fT(pwm); α = d/dt(p,q,r); accelerometer_model
+%  com IMU offset. Saída: accX/accY/accZ.
+    T = zeros(numel(p), 1);
+    for j = 1:4, T = T + k_T(j) .* func_T_ref(pwm(:,j)); end
+    if nargin < 13, kdm_P = []; end
+    [aX, aY, aZ] = accelerometer_model(p, q, r, u, v, w, T./m, ...
+        gradient(p, dt), gradient(q, dt), gradient(r, dt), r_imu, kdm_P);
+end
+
+function [acf, lags] = acf_white(e, maxlag)
+% Autocorrelação normalizada (sem toolbox). acf(1)=lag 0=1.
+    e = e(:) - mean(e);
+    N = numel(e);  c0 = sum(e.^2) + 1e-12;
+    acf = zeros(maxlag+1,1);
+    for k = 0:maxlag
+        acf(k+1) = sum(e(1:N-k) .* e(1+k:N)) / c0;
+    end
+    lags = (0:maxlag)';
+end
+
 function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights_acc, cost_mode, reg_lambda)
 % Custo OEM multi-segmento: concatena resíduos de cada segmento.
 % cost_mode: 'full' (padrão), 'rotational', 'translational'
@@ -585,9 +839,11 @@ function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights
         end
         win_ends = [win_starts(2:end)-1, N];
 
+        aero_s = [];
+        if isfield(sg,'V'), aero_s = struct('V', sg.V(:), 'v', sg.v(:), 'w', sg.w(:)); end
         e_seg = oem_ms_cost_func(P, sg.pqr, sg.acc, sg.att_rad, ...
             sg.T_ref, sg.Q_ref, m, g, dt, N, ...
-            win_starts, win_ends, weights_pqr, weights_acc, cost_mode);
+            win_starts, win_ends, weights_pqr, weights_acc, cost_mode, aero_s);
 
         e_all = [e_all; e_seg]; %#ok<AGROW>
     end
@@ -599,13 +855,23 @@ function e = oem_multi_seg_cost(P, segs, win_sec, m, g, dt, weights_pqr, weights
              sqrt(reg_lambda.kq_pair) * (k_Q(1) - k_Q(2)); ...
              sqrt(reg_lambda.kq_pair) * (k_Q(3) - k_Q(4))];
 
-    e = [e_all; e_reg];
+    % Restrição física: desigualdade triangular dos momentos de inércia.
+    %  ANTES só estava no EEM → o OEM ficava livre e violava Jz≤Jx+Jy. Agora
+    %  o OEM também pune violação (one-sided: zero quando físico).
+    tri_lam = 0; if isfield(reg_lambda,'tri'), tri_lam = reg_lambda.tri; end
+    Jx=P(1); Jy=P(2); Jz=P(3);
+    e_tri = sqrt(tri_lam) * [max(0, Jz-(Jx+Jy)); ...
+                            max(0, Jy-(Jx+Jz)); ...
+                            max(0, Jx-(Jy+Jz))];
+
+    e = [e_all; e_reg; e_tri];
 end
 
 function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, ...
-    win_starts, win_ends, weights_pqr, weights_acc, cost_mode)
+    win_starts, win_ends, weights_pqr, weights_acc, cost_mode, aero)
 
     if nargin < 15, cost_mode = 'full'; end
+    if nargin < 16, aero = []; end
 
     % Obter handles centralizados do vtol_dynamics (edite apenas lá!)
     dyn_h = vtol_dynamics('get_handles');
@@ -628,15 +894,45 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
 
     k_T = P(5:8); k_Q = P(9:12);
     Dp = P(13); Dq = P(14); Dr = P(15);
-    % Bp/Bq/Br, Xu/Yv/Zw, Bz removidos do modelo
 
     % Braços + IMU offset (de parameters() — fonte única)
     proj_p_oem = parameters();
+    % FORMA DO AMORTECIMENTO (parameters().damp_form). Em 'moment' os P(13:15)
+    % sao L_p, M_q, N_r [N.m.s] e entram DENTRO do vetor de momentos, junto com
+    % a aerodinamica; em 'rate' sao c_p, c_q, c_r [1/s] subtraidos da derivada.
+    Lpm = 0; Mqm = 0; Nrm = 0;  Dpr = Dp; Dqr = Dq; Drr = Dr;
+    if isfield(proj_p_oem,'damp_form') && strcmp(proj_p_oem.damp_form,'moment')
+        Lpm = Dp; Mqm = Dq; Nrm = Dr;  Dpr = 0; Dqr = 0; Drr = 0;
+    end
     Lx_r = proj_p_oem.arms.Lx_r;
     Lx_l = proj_p_oem.arms.Lx_l;
     Ly_f = proj_p_oem.arms.Ly_f;
     Ly_r = proj_p_oem.arms.Ly_r;
     r_imu = proj_p_oem.imu_offset;
+
+    % --- AERODINÂMICA DA ESTRUTURA (P(17:22), ∝ V) — coeficientes por amostra ---
+    % aLp(k) = ¼ρSb²·Cl_p·V(k) multiplica o p SIMULADO (é amortecimento, entra
+    % dentro do RK4); aLb(k) = ½ρSb·Cl_β·V(k)·v(k) é exógeno (parcela de
+    % derrapagem). Idem para arfagem e guinada. V, v, w vêm de estimate_velocity.
+    use_aero = ~isempty(aero) && numel(P) >= 22;
+    if use_aero
+        kA = aero_gains(proj_p_oem);
+        Va = aero.V(:);  vb = aero.v(:);  wb = aero.w(:);
+        Va(~isfinite(Va)) = 0;  vb(~isfinite(vb)) = 0;  wb(~isfinite(wb)) = 0;
+        aLp = kA.Lp*P(17)*Va;   aLb = kA.Lb*P(18)*Va.*vb;
+        aMq = kA.Mq*P(19)*Va;   aMa = kA.Ma*P(20)*Va.*wb;
+        aNr = kA.Nr*P(21)*Va;   aNb = kA.Nb*P(22)*Va.*vb;
+        if numel(P) >= 25
+            if isappdata(0,'hu_form')   % forma do Hu: −½ρV²S·(b,c̄,b)·(c_l,c_m,c_n)
+                qS = 0.5*kA.rho*Va.^2*kA.S;
+                aLb = aLb - qS*kA.b*P(23);  aMa = aMa - qS*kA.c*P(24);  aNb = aNb - qS*kA.b*P(25);
+            else                        % rotor: −L_v·v, −M_w·w, −N_v·v
+                aLb = aLb - P(23)*vb;  aMa = aMa - P(24)*wb;  aNb = aNb - P(25)*vb;
+            end
+        end
+    else
+        aLp = zeros(N,1); aLb = aLp; aMq = aLp; aMa = aLp; aNr = aLp; aNb = aLp;
+    end
 
     n_sub = 5;
     dt_sub = dt / n_sub;
@@ -654,34 +950,64 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
         p_sim(i_s) = ps; q_sim(i_s) = qs; r_sim(i_s) = rs;
 
         for k = i_s:i_e-1
-            Tmr = k_T(:)' .* T_ref(k,:);
-            Qmr = k_Q(:)' .* Q_ref(k,:);
-            % Momentos — ArduPilot QuadX (M1,M3=FRONT; M2,M4=REAR)
-            Mx = -(Lx_r*Tmr(1) - Lx_l*Tmr(2) - Lx_l*Tmr(3) + Lx_r*Tmr(4));
-            My =  Ly_f*Tmr(1) - Ly_r*Tmr(2) + Ly_f*Tmr(3) - Ly_r*Tmr(4);
-            Mz = Qmr(1) + Qmr(2) - Qmr(3) - Qmr(4);
+            % Momentos no início (k) e no fim (k+1) do passo — ArduPilot QuadX
+            % (M1,M3=FRONT; M2,M4=REAR). O empuxo vem de motor_chain (RPM contínua
+            % interpolada linearmente), então M(t) é interpolado LINEARMENTE dentro
+            % do passo, igual ao que ode45/vtol_dynamics fazem na validação.
+            % (Antes: M constante por 0,1 s → ≈50 ms de atraso efetivo a mais.)
+            Tmr0 = k_T(:)' .* T_ref(k,:);    Qmr0 = k_Q(:)' .* Q_ref(k,:);
+            Tmr1 = k_T(:)' .* T_ref(k+1,:);  Qmr1 = k_Q(:)' .* Q_ref(k+1,:);
+            Mx0 = -(Lx_r*Tmr0(1) - Lx_l*Tmr0(2) - Lx_l*Tmr0(3) + Lx_r*Tmr0(4));
+            My0 =  Ly_f*Tmr0(1) - Ly_r*Tmr0(2) + Ly_f*Tmr0(3) - Ly_r*Tmr0(4);
+            Mz0 = Qmr0(1) + Qmr0(2) - Qmr0(3) - Qmr0(4);
+            Mx1 = -(Lx_r*Tmr1(1) - Lx_l*Tmr1(2) - Lx_l*Tmr1(3) + Lx_r*Tmr1(4));
+            My1 =  Ly_f*Tmr1(1) - Ly_r*Tmr1(2) + Ly_f*Tmr1(3) - Ly_r*Tmr1(4);
+            Mz1 = Qmr1(1) + Qmr1(2) - Qmr1(3) - Qmr1(4);
+            % parcelas aerodinâmicas EXÓGENAS (derrapagem/incidência) somam-se aos
+            % momentos; as parcelas de AMORTECIMENTO (∝ V·p, V·q, V·r) dependem do
+            % estado e entram estágio a estágio, logo abaixo.
+            Mx0 = Mx0 + aLb(k);  Mx1 = Mx1 + aLb(k+1);
+            My0 = My0 + aMa(k);  My1 = My1 + aMa(k+1);
+            Mz0 = Mz0 + aNb(k);  Mz1 = Mz1 + aNb(k+1);
+            dMx = Mx1-Mx0; dMy = My1-My0; dMz = Mz1-Mz0;
+            aLp0 = aLp(k); daLp = aLp(k+1)-aLp(k);
+            aMq0 = aMq(k); daMq = aMq(k+1)-aMq(k);
+            aNr0 = aNr(k); daNr = aNr(k+1)-aNr(k);
 
             for si = 1:n_sub
-                % RK4 sub-stepping (Mx, My, Mz constantes no sub-step)
+                % RK4 sub-stepping com M(t) linear no passo: frações dos estágios
+                fa = (si-1)/n_sub;  fb = fa + 0.5/n_sub;  fc = fa + 1/n_sub;
+                Mxa = Mx0+fa*dMx; Mya = My0+fa*dMy; Mza = Mz0+fa*dMz;
+                Mxb = Mx0+fb*dMx; Myb = My0+fb*dMy; Mzb = Mz0+fb*dMz;
+                Mxc = Mx0+fc*dMx; Myc = My0+fc*dMy; Mzc = Mz0+fc*dMz;
+                % coeficientes que multiplicam o estado DENTRO de M: aerodinamica
+                % (aLp etc., ja negativa) menos o amortecimento em forma de momento
+                La = aLp0+fa*daLp - Lpm; Lb_ = aLp0+fb*daLp - Lpm; Lc = aLp0+fc*daLp - Lpm;
+                Qa = aMq0+fa*daMq - Mqm; Qb = aMq0+fb*daMq - Mqm; Qc = aMq0+fc*daMq - Mqm;
+                Ra = aNr0+fa*daNr - Nrm; Rb = aNr0+fb*daNr - Nrm; Rc = aNr0+fc*daNr - Nrm;
                 % k1
-                pd1 = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps;
-                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs;
-                rd1 = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs;
+                MxA = Mxa + La*ps;  MyA = Mya + Qa*qs;  MzA = Mza + Ra*rs;
+                pd1 = G1*ps*qs - G2*qs*rs + G3*MxA + G4*MzA - Dpr*ps;
+                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*MyA - Dqr*qs;
+                rd1 = G7*ps*qs - G1*qs*rs + G4*MxA + G8*MzA - Drr*rs;
                 % k2
                 p2 = ps+h2*pd1; q2 = qs+h2*qd1; r2 = rs+h2*rd1;
-                pd2 = G1*p2*q2 - G2*q2*r2 + G3*Mx + G4*Mz - Dp*p2;
-                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*My - Dq*q2;
-                rd2 = G7*p2*q2 - G1*q2*r2 + G4*Mx + G8*Mz - Dr*r2;
+                MxB = Mxb + Lb_*p2;  MyB = Myb + Qb*q2;  MzB = Mzb + Rb*r2;
+                pd2 = G1*p2*q2 - G2*q2*r2 + G3*MxB + G4*MzB - Dpr*p2;
+                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*MyB - Dqr*q2;
+                rd2 = G7*p2*q2 - G1*q2*r2 + G4*MxB + G8*MzB - Drr*r2;
                 % k3
                 p3 = ps+h2*pd2; q3 = qs+h2*qd2; r3 = rs+h2*rd2;
-                pd3 = G1*p3*q3 - G2*q3*r3 + G3*Mx + G4*Mz - Dp*p3;
-                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*My - Dq*q3;
-                rd3 = G7*p3*q3 - G1*q3*r3 + G4*Mx + G8*Mz - Dr*r3;
+                MxC = Mxb + Lb_*p3;  MyC = Myb + Qb*q3;  MzC = Mzb + Rb*r3;
+                pd3 = G1*p3*q3 - G2*q3*r3 + G3*MxC + G4*MzC - Dpr*p3;
+                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*MyC - Dqr*q3;
+                rd3 = G7*p3*q3 - G1*q3*r3 + G4*MxC + G8*MzC - Drr*r3;
                 % k4
                 p4 = ps+dt_sub*pd3; q4 = qs+dt_sub*qd3; r4 = rs+dt_sub*rd3;
-                pd4 = G1*p4*q4 - G2*q4*r4 + G3*Mx + G4*Mz - Dp*p4;
-                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*My - Dq*q4;
-                rd4 = G7*p4*q4 - G1*q4*r4 + G4*Mx + G8*Mz - Dr*r4;
+                MxD = Mxc + Lc*p4;  MyD = Myc + Qc*q4;  MzD = Mzc + Rc*r4;
+                pd4 = G1*p4*q4 - G2*q4*r4 + G3*MxD + G4*MzD - Dpr*p4;
+                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*MyD - Dqr*q4;
+                rd4 = G7*p4*q4 - G1*q4*r4 + G4*MxD + G8*MzD - Drr*r4;
                 % update
                 ps = ps + dt_sub/6*(pd1 + 2*pd2 + 2*pd3 + pd4);
                 qs = qs + dt_sub/6*(qd1 + 2*qd2 + 2*qd3 + qd4);
@@ -706,6 +1032,9 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
 
     T_total = k_T(1)*T_ref(:,1) + k_T(2)*T_ref(:,2) + ...
               k_T(3)*T_ref(:,3) + k_T(4)*T_ref(:,4);
+    % influxo no empuxo total: T ← T − 4·k_v·w (k_v medido, w da velocidade estimada)
+    kvT = proj_p_oem.k_v_thrust;
+    if kvT > 0 && use_aero, T_total = T_total - 4*kvT*wb; end
 
     phi_r = att_rad(:,1); theta_r = att_rad(:,2);
     gx = -g * sin(theta_r);
@@ -717,6 +1046,16 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
     dt_sub_t = dt / n_sub_t;
     h2_t = dt_sub_t / 2;
 
+    % Arrasto translacional por amostra, Nx3 [1/s]:
+    %   x, y : arrasto induzido de rotor (g·C_d, constante) + estrutura ∝ V
+    %   z    : só estrutura (o C_d de Beard age em x,y)
+    kdm_P = [];
+    if numel(P) >= 16, kdm_P = repmat(g*P(16)*[1 1 0], N, 1); end
+    if numel(P) >= 25 && any(P(23:25) ~= 0) && use_aero
+        kF = aero_gains(proj_p_oem);
+        kdm_P = kdm_P + (kF.F/m) * (Va(:) * P(23:25)');
+    end
+
     u_int = zeros(N,1); v_int = zeros(N,1); w_int = zeros(N,1);
     for k = 1:N-1
         pk = pqr(k,1); qk = pqr(k,2); rk = pqr(k,3);
@@ -724,18 +1063,19 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
         Tk_m = T_total(k)/m;
 
         us = u_int(k); vs = v_int(k); ws = w_int(k);
+        kdm_k = [];  if ~isempty(kdm_P), kdm_k = kdm_P(k,:); end
         for si = 1:n_sub_t
             % k1
-            [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m);
+            [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, kdm_k);
             % k2
             u2=us+h2_t*ud1; v2=vs+h2_t*vd1; w2=ws+h2_t*wd1;
-            [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m);
+            [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, kdm_k);
             % k3
             u3=us+h2_t*ud2; v3=vs+h2_t*vd2; w3=ws+h2_t*wd2;
-            [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m);
+            [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, kdm_k);
             % k4
             u4=us+dt_sub_t*ud3; v4=vs+dt_sub_t*vd3; w4=ws+dt_sub_t*wd3;
-            [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m);
+            [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, kdm_k);
             % update
             us = us + dt_sub_t/6*(ud1 + 2*ud2 + 2*ud3 + ud4);
             vs = vs + dt_sub_t/6*(vd1 + 2*vd2 + 2*vd3 + vd4);
@@ -762,7 +1102,7 @@ function e = oem_ms_cost_func(P, pqr, acc, att_rad, T_ref, Q_ref, m, g, dt, N, .
         u_int, v_int, w_int, ...
         T_total/m, ...
         p_dot_sig, q_dot_sig, r_dot_sig, ...
-        r_imu);
+        r_imu, kdm_P);
 
     sw_a = sqrt(weights_acc(:));
     e_acc = [sw_a(1)*(acc(:,1) - accX_m); ...
@@ -813,6 +1153,7 @@ function res = simulate_one_window(P, time, pwm, pqr, att, N, ...
 % Nenhuma interpolação entre etapas, nenhuma reamostragem.
 
     nan3 = NaN(N,1);
+    kdm_P = kdm_of(P, time, constants_sim.m);   % Nx3: rotor + estrutura ∝ V
 
     % Condição inicial: [p,q,r] e [phi,theta,psi] dos dados medidos, [u,v,w]=0
     att_rad0 = deg2rad(att(1,:));
@@ -834,31 +1175,10 @@ function res = simulate_one_window(P, time, pwm, pqr, att, N, ...
         res.(['theta_s_' suffix]) = rad2deg(y_out(:,5));
         res.(['psi_s_' suffix])   = rad2deg(y_out(:,6));
 
-        % Acelerômetro: modelo de sensor (arquivo separado).
-        % Inclui α × r + ω × (ω × r) com IMU offset de parameters().
-        proj_p_sw = parameters();
-        r_imu_sw = proj_p_sw.imu_offset;
-
-        k_T_p = P(5:8);
-        m_val = constants_sim.m;
-
-        T_vec = zeros(N,1);
-        for k = 1:N
-            for j = 1:4
-                T_vec(k) = T_vec(k) + k_T_p(j) * func_T_ref(pwm(k,j));
-            end
-        end
-        % Derivadas de p, q, r por gradient (pra termo de Euler α × r)
-        dt_sw = time(2) - time(1);
-        p_dot_sw = gradient(y_out(:,1), dt_sw);
-        q_dot_sw = gradient(y_out(:,2), dt_sw);
-        r_dot_sw = gradient(y_out(:,3), dt_sw);
-        [accX, accY, accZ] = accelerometer_model( ...
-            y_out(:,1), y_out(:,2), y_out(:,3), ...
-            y_out(:,7), y_out(:,8), y_out(:,9), ...
-            T_vec/m_val, ...
-            p_dot_sw, q_dot_sw, r_dot_sw, ...
-            r_imu_sw);
+        % Acelerômetro (sensor): pqr e u,v,w SIMULADOS (9 estados).
+        [accX, accY, accZ] = accel_eval(y_out(:,1), y_out(:,2), y_out(:,3), ...
+            y_out(:,7), y_out(:,8), y_out(:,9), pwm, P(5:8), func_T_ref, ...
+            constants_sim.m, parameters().imu_offset, time(2)-time(1), kdm_P);
         res.(['accX_s_' suffix]) = accX;
         res.(['accY_s_' suffix]) = accY;
         res.(['accZ_s_' suffix]) = accZ;
@@ -887,6 +1207,8 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
 
     g = constants_sim.g;
     m = constants_sim.m;
+    kdm_P = [];  if numel(P) >= 16, kdm_P = g * P(16) * [1 1 0]; end   % C_d → g·C_d (x,y)
+    kdm_k = kdm_P;   % simuladores auxiliares: sem as forças ∝ V da estrutura
     k_T = P(5:8);
 
     proj_p_sc = parameters();
@@ -943,13 +1265,13 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
 
             us = u_int(k); vs = v_int(k); ws = w_int(k);
             for si = 1:n_sub
-                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m);
+                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, kdm_k);
                 u2=us+h2*ud1; v2=vs+h2*vd1; w2=ws+h2*wd1;
-                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m);
+                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, kdm_k);
                 u3=us+h2*ud2; v3=vs+h2*vd2; w3=ws+h2*wd2;
-                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m);
+                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, kdm_k);
                 u4=us+dt_sub*ud3; v4=vs+dt_sub*vd3; w4=ws+dt_sub*wd3;
-                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m);
+                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, kdm_k);
                 us = us + dt_sub/6*(ud1+2*ud2+2*ud3+ud4);
                 vs = vs + dt_sub/6*(vd1+2*vd2+2*vd3+vd4);
                 ws = ws + dt_sub/6*(wd1+2*wd2+2*wd3+wd4);
@@ -957,16 +1279,9 @@ function res = simulate_full_semicoupled(P, time_tr, pwm_tr, pqr_tr, acc_tr, att
             u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
         end
 
-        % Saída do modelo via accelerometer_model (sensor)
-        p_dot_sc = gradient(pqr(:,1), dt);
-        q_dot_sc = gradient(pqr(:,2), dt);
-        r_dot_sc = gradient(pqr(:,3), dt);
-        [accX, accY, accZ] = accelerometer_model( ...
-            pqr(:,1), pqr(:,2), pqr(:,3), ...
-            u_int, v_int, w_int, ...
-            T_total/m, ...
-            p_dot_sc, q_dot_sc, r_dot_sc, ...
-            r_imu_sc);
+        % Acelerômetro (sensor): pqr MEDIDO + u,v,w integrados.
+        [accX, accY, accZ] = accel_eval(pqr(:,1), pqr(:,2), pqr(:,3), ...
+            u_int, v_int, w_int, pwm, k_T, func_T_ref, m, r_imu_sc, dt, kdm_P);
 
         res.(['accX_s_' suffix]) = accX;
         res.(['accY_s_' suffix]) = accY;
@@ -988,6 +1303,8 @@ function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, 
 
     g = constants_sim.g;
     m = constants_sim.m;
+    kdm_P = [];  if numel(P) >= 16, kdm_P = g * P(16) * [1 1 0]; end   % C_d → g·C_d (x,y)
+    kdm_k = kdm_P;   % simuladores auxiliares: sem as forças ∝ V da estrutura
 
     % Parâmetros (igual ao oem_ms_cost_func)
     Jx = P(1); Jy = P(2); Jz = P(3); Jxz = P(4);
@@ -1004,10 +1321,16 @@ function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, 
 
     k_T = P(5:8); k_Q = P(9:12);
     Dp = P(13); Dq = P(14); Dr = P(15);
-    % Bp/Bq/Br, Xu/Yv/Zw, Bz removidos do modelo
 
     % Braços + IMU offset (de parameters() — fonte única)
     proj_p_sim = parameters();
+    % FORMA DO AMORTECIMENTO (parameters().damp_form). Em 'moment' os P(13:15)
+    % sao L_p, M_q, N_r [N.m.s] e entram DENTRO do vetor de momentos, junto com
+    % a aerodinamica; em 'rate' sao c_p, c_q, c_r [1/s] subtraidos da derivada.
+    Lpm = 0; Mqm = 0; Nrm = 0;  Dpr = Dp; Dqr = Dq; Drr = Dr;
+    if isfield(proj_p_sim,'damp_form') && strcmp(proj_p_sim.damp_form,'moment')
+        Lpm = Dp; Mqm = Dq; Nrm = Dr;  Dpr = 0; Dqr = 0; Drr = 0;
+    end
     Lx_r = proj_p_sim.arms.Lx_r; Lx_l = proj_p_sim.arms.Lx_l;
     Ly_f = proj_p_sim.arms.Ly_f; Ly_r = proj_p_sim.arms.Ly_r;
     r_imu_hyb = proj_p_sim.imu_offset;
@@ -1044,6 +1367,7 @@ function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, 
         p_sim = zeros(N, 1); q_sim = zeros(N, 1); r_sim = zeros(N, 1);
         ps = pqr(1,1); qs = pqr(1,2); rs = pqr(1,3);   % IC do primeiro medido
         p_sim(1) = ps; q_sim(1) = qs; r_sim(1) = rs;
+        [aLp, aLb, aMq, aMa, aNr, aNb] = aero_terms_local(P, time);
 
         for k = 1:N-1
             Tmr = k_T(:)' .* T_ref(k,:);
@@ -1052,23 +1376,30 @@ function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, 
             Mx = -(Lx_r*Tmr(1) - Lx_l*Tmr(2) - Lx_l*Tmr(3) + Lx_r*Tmr(4));
             My =  Ly_f*Tmr(1) - Ly_r*Tmr(2) + Ly_f*Tmr(3) - Ly_r*Tmr(4);
             Mz = Qmr(1) + Qmr(2) - Qmr(3) - Qmr(4);
+            % aerodinâmica da estrutura (constante no passo, como os momentos)
+            Mx = Mx + aLb(k);  My = My + aMa(k);  Mz = Mz + aNb(k);
+            cLp = aLp(k) - Lpm; cMq = aMq(k) - Mqm; cNr = aNr(k) - Nrm;
 
             for si = 1:n_sub
-                pd1 = G1*ps*qs - G2*qs*rs + G3*Mx + G4*Mz - Dp*ps;
-                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*My - Dq*qs;
-                rd1 = G7*ps*qs - G1*qs*rs + G4*Mx + G8*Mz - Dr*rs;
+                MxA = Mx + cLp*ps;  MyA = My + cMq*qs;  MzA = Mz + cNr*rs;
+                pd1 = G1*ps*qs - G2*qs*rs + G3*MxA + G4*MzA - Dpr*ps;
+                qd1 = G5*ps*rs - G6*(ps^2 - rs^2) + invJy*MyA - Dqr*qs;
+                rd1 = G7*ps*qs - G1*qs*rs + G4*MxA + G8*MzA - Drr*rs;
                 p2 = ps+h2*pd1; q2 = qs+h2*qd1; r2 = rs+h2*rd1;
-                pd2 = G1*p2*q2 - G2*q2*r2 + G3*Mx + G4*Mz - Dp*p2;
-                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*My - Dq*q2;
-                rd2 = G7*p2*q2 - G1*q2*r2 + G4*Mx + G8*Mz - Dr*r2;
+                MxB = Mx + cLp*p2;  MyB = My + cMq*q2;  MzB = Mz + cNr*r2;
+                pd2 = G1*p2*q2 - G2*q2*r2 + G3*MxB + G4*MzB - Dpr*p2;
+                qd2 = G5*p2*r2 - G6*(p2^2 - r2^2) + invJy*MyB - Dqr*q2;
+                rd2 = G7*p2*q2 - G1*q2*r2 + G4*MxB + G8*MzB - Drr*r2;
                 p3 = ps+h2*pd2; q3 = qs+h2*qd2; r3 = rs+h2*rd2;
-                pd3 = G1*p3*q3 - G2*q3*r3 + G3*Mx + G4*Mz - Dp*p3;
-                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*My - Dq*q3;
-                rd3 = G7*p3*q3 - G1*q3*r3 + G4*Mx + G8*Mz - Dr*r3;
+                MxC = Mx + cLp*p3;  MyC = My + cMq*q3;  MzC = Mz + cNr*r3;
+                pd3 = G1*p3*q3 - G2*q3*r3 + G3*MxC + G4*MzC - Dpr*p3;
+                qd3 = G5*p3*r3 - G6*(p3^2 - r3^2) + invJy*MyC - Dqr*q3;
+                rd3 = G7*p3*q3 - G1*q3*r3 + G4*MxC + G8*MzC - Drr*r3;
                 p4 = ps+dt_sub*pd3; q4 = qs+dt_sub*qd3; r4 = rs+dt_sub*rd3;
-                pd4 = G1*p4*q4 - G2*q4*r4 + G3*Mx + G4*Mz - Dp*p4;
-                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*My - Dq*q4;
-                rd4 = G7*p4*q4 - G1*q4*r4 + G4*Mx + G8*Mz - Dr*r4;
+                MxD = Mx + cLp*p4;  MyD = My + cMq*q4;  MzD = Mz + cNr*r4;
+                pd4 = G1*p4*q4 - G2*q4*r4 + G3*MxD + G4*MzD - Dpr*p4;
+                qd4 = G5*p4*r4 - G6*(p4^2 - r4^2) + invJy*MyD - Dqr*q4;
+                rd4 = G7*p4*q4 - G1*q4*r4 + G4*MxD + G8*MzD - Drr*r4;
                 ps = ps + dt_sub/6 * (pd1 + 2*pd2 + 2*pd3 + pd4);
                 qs = qs + dt_sub/6 * (qd1 + 2*qd2 + 2*qd3 + qd4);
                 rs = rs + dt_sub/6 * (rd1 + 2*rd2 + 2*rd3 + rd4);
@@ -1118,13 +1449,13 @@ function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, 
 
             us = u_int(k); vs = v_int(k); ws = w_int(k);
             for si = 1:n_sub_t
-                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m);
+                [ud1,vd1,wd1] = trans_dot_fn(pk,qk,rk, us,vs,ws, gxk,gyk,gzk, Tk_m, kdm_k);
                 u2=us+h2_t*ud1; v2=vs+h2_t*vd1; w2=ws+h2_t*wd1;
-                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m);
+                [ud2,vd2,wd2] = trans_dot_fn(pk,qk,rk, u2,v2,w2, gxk,gyk,gzk, Tk_m, kdm_k);
                 u3=us+h2_t*ud2; v3=vs+h2_t*vd2; w3=ws+h2_t*wd2;
-                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m);
+                [ud3,vd3,wd3] = trans_dot_fn(pk,qk,rk, u3,v3,w3, gxk,gyk,gzk, Tk_m, kdm_k);
                 u4=us+dt_sub_t*ud3; v4=vs+dt_sub_t*vd3; w4=ws+dt_sub_t*wd3;
-                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m);
+                [ud4,vd4,wd4] = trans_dot_fn(pk,qk,rk, u4,v4,w4, gxk,gyk,gzk, Tk_m, kdm_k);
                 us = us + dt_sub_t/6*(ud1+2*ud2+2*ud3+ud4);
                 vs = vs + dt_sub_t/6*(vd1+2*vd2+2*vd3+vd4);
                 ws = ws + dt_sub_t/6*(wd1+2*wd2+2*wd3+wd4);
@@ -1132,17 +1463,9 @@ function res = simulate_full_hybrid(P, time_tr, pwm_tr, pqr_tr, acc_tr, att_tr, 
             u_int(k+1) = us; v_int(k+1) = vs; w_int(k+1) = ws;
         end
 
-        % Aceleração específica IMU via accelerometer_model (sensor)
-        % Usa pqr SIMULADO + α por derivada numérica do pqr SIMULADO
-        p_dot_hyb = gradient(p_sim, dt);
-        q_dot_hyb = gradient(q_sim, dt);
-        r_dot_hyb = gradient(r_sim, dt);
-        [accX, accY, accZ] = accelerometer_model( ...
-            p_sim, q_sim, r_sim, ...
-            u_int, v_int, w_int, ...
-            T_total/m, ...
-            p_dot_hyb, q_dot_hyb, r_dot_hyb, ...
-            r_imu_hyb);
+        % Acelerômetro (sensor): pqr SIMULADO + u,v,w integrados.
+        [accX, accY, accZ] = accel_eval(p_sim, q_sim, r_sim, ...
+            u_int, v_int, w_int, pwm, k_T, func_T_ref, m, r_imu_hyb, dt, kdm_P);
 
         res.(['accX_s_' suffix]) = accX;
         res.(['accY_s_' suffix]) = accY;
@@ -1162,6 +1485,30 @@ function print_R2(label, res, ~, pqr_vl, ~, acc_vl, ~, t_val, R2_func)
         fprintf('    R² AccX=%.4f | AccY=%.4f | AccZ=%.4f\n', ...
             R2_func(acc_vl(:,1), res.accX_s_vl), R2_func(acc_vl(:,2), res.accY_s_vl), R2_func(acc_vl(:,3), res.accZ_s_vl));
     end
+    % Métricas extras: RMSE físico + TIC (Theil) + decomposição bias/var/cov
+    rows = {};
+    if res.pqr_vl_ok
+        rows = [rows; {'p',pqr_vl(:,1),res.p_s_vl}; {'q',pqr_vl(:,2),res.q_s_vl}; {'r',pqr_vl(:,3),res.r_s_vl}];
+    end
+    if res.full_vl_ok
+        rows = [rows; {'accX',acc_vl(:,1),res.accX_s_vl}; {'accY',acc_vl(:,2),res.accY_s_vl}; {'accZ',acc_vl(:,3),res.accZ_s_vl}];
+    end
+    if ~isempty(rows)
+        fprintf('    %-5s %9s %7s   Theil bias/var/cov\n', 'canal', 'RMSE', 'TIC');
+        for i = 1:size(rows,1)
+            fm = fit_metrics(rows{i,2}, rows{i,3});
+            fprintf('    %-5s %9.4f %7.3f   %.2f/%.2f/%.2f\n', ...
+                rows{i,1}, fm.RMSE, fm.TIC, fm.U_bias, fm.U_var, fm.U_cov);
+        end
+    end
+end
+
+function plot_ms(t, meas, sim, R2f, ylab, ttl, leg1, last)
+%PLOT_MS  Subplot medido (azul) vs simulado (vermelho tracejado) + R² no título.
+    plot(t, meas, 'b-', t, sim, 'r--', 'LineWidth', 1.3);
+    legend(leg1, 'Sim'); ylabel(ylab); grid on;
+    title(sprintf('%s (R^2=%.3f)', ttl, R2f(meas, sim)));
+    if last, xlabel('Tempo (s)'); end
 end
 
 function plot_all_results(titulo, res, ~, ~, ~, ...
@@ -1170,55 +1517,26 @@ function plot_all_results(titulo, res, ~, ~, ~, ...
     lbl_vl = sprintf('VALIDAÇÃO [%d-%ds]', t_val_range(1), t_val_range(2));
     prefix = stage_prefix(titulo);   % '01_P0_', '02_Pfinal_' ou '03_Pfinal_semi_'
 
+    img = setup_paths().images;
     fig1 = figure('Name', ['pqr - ' titulo], 'Position', [80 50 900 700], 'Visible', 'off');
-    subplot(3,1,1);
-    plot(time_vl, pqr_vl(:,1), 'b-', time_vl, res.p_s_vl, 'r--', 'LineWidth', 1.3);
-    legend('Exp','Sim'); ylabel('p (rad/s)');
-    title(sprintf('%s — p (R^2=%.3f)', lbl_vl, R2_func(pqr_vl(:,1), res.p_s_vl))); grid on;
-    subplot(3,1,2);
-    plot(time_vl, pqr_vl(:,2), 'b-', time_vl, res.q_s_vl, 'r--', 'LineWidth', 1.3);
-    legend('Exp','Sim'); ylabel('q (rad/s)');
-    title(sprintf('%s — q (R^2=%.3f)', lbl_vl, R2_func(pqr_vl(:,2), res.q_s_vl))); grid on;
-    subplot(3,1,3);
-    plot(time_vl, pqr_vl(:,3), 'b-', time_vl, res.r_s_vl, 'r--', 'LineWidth', 1.3);
-    legend('Exp','Sim'); xlabel('Tempo (s)'); ylabel('r (rad/s)');
-    title(sprintf('%s — r (R^2=%.3f)', lbl_vl, R2_func(pqr_vl(:,3), res.r_s_vl))); grid on;
-    sgtitle(['Vel. Angulares (Val) — ' titulo]);
-    saveas(fig1, fullfile(setup_paths().images, [prefix 'pqr.png']));
+    subplot(3,1,1); plot_ms(time_vl, pqr_vl(:,1), res.p_s_vl, R2_func, 'p (rad/s)', [lbl_vl ' — p'], 'Exp', false);
+    subplot(3,1,2); plot_ms(time_vl, pqr_vl(:,2), res.q_s_vl, R2_func, 'q (rad/s)', [lbl_vl ' — q'], 'Exp', false);
+    subplot(3,1,3); plot_ms(time_vl, pqr_vl(:,3), res.r_s_vl, R2_func, 'r (rad/s)', [lbl_vl ' — r'], 'Exp', true);
+    sgtitle(['Vel. Angulares (Val) — ' titulo]); saveas(fig1, fullfile(img, [prefix 'pqr.png']));
 
     fig2 = figure('Name', ['Acc - ' titulo], 'Position', [120 90 900 700], 'Visible', 'off');
-    subplot(3,1,1);
-    plot(time_vl, acc_vl(:,1), 'b-', time_vl, res.accX_s_vl, 'r--', 'LineWidth', 1.3);
-    legend('IMU','Sim'); ylabel('AccX (m/s²)');
-    title(sprintf('%s — AccX (R^2=%.3f)', lbl_vl, R2_func(acc_vl(:,1), res.accX_s_vl))); grid on;
-    subplot(3,1,2);
-    plot(time_vl, acc_vl(:,2), 'b-', time_vl, res.accY_s_vl, 'r--', 'LineWidth', 1.3);
-    legend('IMU','Sim'); ylabel('AccY (m/s²)');
-    title(sprintf('%s — AccY (R^2=%.3f)', lbl_vl, R2_func(acc_vl(:,2), res.accY_s_vl))); grid on;
-    subplot(3,1,3);
-    plot(time_vl, acc_vl(:,3), 'b-', time_vl, res.accZ_s_vl, 'r--', 'LineWidth', 1.3);
-    legend('IMU','Sim'); xlabel('Tempo (s)'); ylabel('AccZ (m/s²)');
-    title(sprintf('%s — AccZ (R^2=%.3f)', lbl_vl, R2_func(acc_vl(:,3), res.accZ_s_vl))); grid on;
-    sgtitle(['Acelerações (Val) — ' titulo]);
-    saveas(fig2, fullfile(setup_paths().images, [prefix 'acc.png']));
+    subplot(3,1,1); plot_ms(time_vl, acc_vl(:,1), res.accX_s_vl, R2_func, 'AccX (m/s²)', [lbl_vl ' — AccX'], 'IMU', false);
+    subplot(3,1,2); plot_ms(time_vl, acc_vl(:,2), res.accY_s_vl, R2_func, 'AccY (m/s²)', [lbl_vl ' — AccY'], 'IMU', false);
+    subplot(3,1,3); plot_ms(time_vl, acc_vl(:,3), res.accZ_s_vl, R2_func, 'AccZ (m/s²)', [lbl_vl ' — AccZ'], 'IMU', true);
+    sgtitle(['Acelerações (Val) — ' titulo]); saveas(fig2, fullfile(img, [prefix 'acc.png']));
 
     % --- Gráfico de Atitude (phi, theta, psi) ---
     if nargin >= 12 && ~isempty(att_vl) && isfield(res, 'phi_s_vl') && res.pqr_vl_ok
         fig3 = figure('Name', ['Atitude - ' titulo], 'Position', [160 130 900 700], 'Visible', 'off');
-        subplot(3,1,1);
-        plot(time_vl, att_vl(:,1), 'b-', time_vl, res.phi_s_vl, 'r--', 'LineWidth', 1.3);
-        legend('EKF','Sim'); ylabel('\phi (°)');
-        title(sprintf('%s — \\phi (R^2=%.3f)', lbl_vl, R2_func(att_vl(:,1), res.phi_s_vl))); grid on;
-        subplot(3,1,2);
-        plot(time_vl, att_vl(:,2), 'b-', time_vl, res.theta_s_vl, 'r--', 'LineWidth', 1.3);
-        legend('EKF','Sim'); ylabel('\theta (°)');
-        title(sprintf('%s — \\theta (R^2=%.3f)', lbl_vl, R2_func(att_vl(:,2), res.theta_s_vl))); grid on;
-        subplot(3,1,3);
-        plot(time_vl, att_vl(:,3), 'b-', time_vl, res.psi_s_vl, 'r--', 'LineWidth', 1.3);
-        legend('EKF','Sim'); xlabel('Tempo (s)'); ylabel('\psi (°)');
-        title(sprintf('%s — \\psi (R^2=%.3f)', lbl_vl, R2_func(att_vl(:,3), res.psi_s_vl))); grid on;
-        sgtitle(['Atitude (Val) — ' titulo]);
-        saveas(fig3, fullfile(setup_paths().images, [prefix 'att.png']));
+        subplot(3,1,1); plot_ms(time_vl, att_vl(:,1), res.phi_s_vl,   R2_func, '\phi (°)',   [lbl_vl ' — \phi'],   'EKF', false);
+        subplot(3,1,2); plot_ms(time_vl, att_vl(:,2), res.theta_s_vl, R2_func, '\theta (°)', [lbl_vl ' — \theta'], 'EKF', false);
+        subplot(3,1,3); plot_ms(time_vl, att_vl(:,3), res.psi_s_vl,   R2_func, '\psi (°)',   [lbl_vl ' — \psi'],   'EKF', true);
+        sgtitle(['Atitude (Val) — ' titulo]); saveas(fig3, fullfile(img, [prefix 'att.png']));
     end
 end
 
@@ -1511,5 +1829,32 @@ function p = stage_prefix(titulo)
         p = '04_Pfinal_semi_';
     else
         p = '02_Pfinal_';
+    end
+end
+
+function [aLp, aLb, aMq, aMa, aNr, aNb] = aero_terms_local(P, time)
+%AERO_TERMS_LOCAL  Coeficientes aerodinâmicos por amostra para os simuladores
+% auxiliares (híbrido, semi-acoplado). V, v, w vêm do appdata 'aero_vel' posto
+% no início do script (velocidade estimada de bordo). Sem appdata, ou com P de
+% 15 elementos, devolve zeros — o modelo volta a ser o rotacional puro.
+    N = numel(time);
+    z = zeros(N,1);  aLp=z; aLb=z; aMq=z; aMa=z; aNr=z; aNb=z;
+    av = getappdata(0, 'aero_vel');
+    if numel(P) < 22 || isempty(av) || ~isstruct(av), return; end
+    V = interp1(av.t, av.V, time(:), 'linear', 0);
+    v = interp1(av.t, av.v, time(:), 'linear', 0);
+    w = interp1(av.t, av.w, time(:), 'linear', 0);
+    V(~isfinite(V)) = 0;  v(~isfinite(v)) = 0;  w(~isfinite(w)) = 0;
+    kA = aero_gains();
+    aLp = kA.Lp*P(17)*V;   aLb = kA.Lb*P(18)*V.*v;
+    aMq = kA.Mq*P(19)*V;   aMa = kA.Ma*P(20)*V.*w;
+    aNr = kA.Nr*P(21)*V;   aNb = kA.Nb*P(22)*V.*v;
+    if numel(P) >= 25
+        if isappdata(0,'hu_form')
+            qS = 0.5*kA.rho*V.^2*kA.S;
+            aLb = aLb - qS*kA.b*P(23);  aMa = aMa - qS*kA.c*P(24);  aNb = aNb - qS*kA.b*P(25);
+        else
+            aLb = aLb - P(23)*v;  aMa = aMa - P(24)*w;  aNb = aNb - P(25)*v;
+        end
     end
 end

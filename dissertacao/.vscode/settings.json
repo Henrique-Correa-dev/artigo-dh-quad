@@ -4,6 +4,13 @@
   // Combina com a logica do Makefile que ja vem no template.
   "latex-workshop.latex.outDir": "%DIR%/output",
 
-  // Visualizador de PDF interno, em aba do Cursor (Cmd+Alt+V).
-  "latex-workshop.view.pdf.viewer": "tab"
+  // Visualizador externo: Skim (auto-reload mantendo a posicao).
+  // Para voltar ao viewer em aba, troque "external" por "tab".
+  "latex-workshop.view.pdf.viewer": "external",
+  "latex-workshop.view.pdf.external.viewer.command": "open",
+  "latex-workshop.view.pdf.external.viewer.args": ["-a", "Skim", "%PDF%"],
+
+  // Forward search (do .tex para a posicao no PDF) via displayline do Skim.
+  "latex-workshop.view.pdf.external.synctex.command": "/Applications/Skim.app/Contents/SharedSupport/displayline",
+  "latex-workshop.view.pdf.external.synctex.args": ["-r", "%LINE%", "%PDF%", "%TEX%"]
 }

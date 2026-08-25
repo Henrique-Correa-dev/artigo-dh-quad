@@ -28,6 +28,8 @@ function L = load_log_data(filename)
 %   L.time_RCIN  (Jx1, opcional [] se ausente)
 %   L.rcin_roll, L.rcin_pitch, L.rcin_throttle, L.rcin_yaw  (Jx1, em PWM us)
 %   L.time_GPS   (opcional, [] se não tiver)
+%   L.time_MAG   (Px1, opcional [] se ausente)
+%   L.magX, L.magY, L.magZ  (Px1, magnetômetro em mGauss — campo já com offset aplicado)
 %   L.format     string: 'legacy' ou 'mp_export'
 %   L.source     filename original
 
@@ -52,6 +54,10 @@ function L = load_log_data(filename)
         % Arquivo já é pré-processado (gerado por test_flight.m)
         L = S.L;
         L.source = filename;
+        % Compat: concat antigo pode não ter campos de mag — adiciona vazios
+        if ~isfield(L, 'time_MAG')
+            L.time_MAG = []; L.magX = []; L.magY = []; L.magZ = [];
+        end
         % Dedup defensivo (concat antigo pode ter duplicatas dos logs originais)
         L = dedup_timestamps_(L);
         fprintf('load_log_data: %s (concat de %d logs) | %.1fs totais\n', ...
@@ -123,6 +129,15 @@ function L = dedup_timestamps_(L)
             fprintf('  dedup RCIN: removidas %d duplicatas\n', n0 - numel(L.time_RCIN));
         end
     end
+
+    if isfield(L, 'time_MAG') && ~isempty(L.time_MAG)
+        n0 = numel(L.time_MAG);
+        [L.time_MAG, m] = unique_keep_first(L.time_MAG);
+        L.magX = L.magX(m); L.magY = L.magY(m); L.magZ = L.magZ(m);
+        if numel(L.time_MAG) < n0
+            fprintf('  dedup MAG:  removidas %d duplicatas\n', n0 - numel(L.time_MAG));
+        end
+    end
 end
 
 
@@ -159,6 +174,16 @@ function L = load_legacy_(L, S)
         L.time_GPS = double(S.GPS.TimeUS) / 1e6;
     else
         L.time_GPS = [];
+    end
+
+    % Magnetômetro (struct MAG) — opcional
+    if isfield(S, 'MAG') && isstruct(S.MAG)
+        L.time_MAG = double(S.MAG.TimeUS) / 1e6;
+        L.magX = double(S.MAG.MagX);
+        L.magY = double(S.MAG.MagY);
+        L.magZ = double(S.MAG.MagZ);
+    else
+        L.time_MAG = []; L.magX = []; L.magY = []; L.magZ = [];
     end
 end
 
@@ -202,5 +227,16 @@ function L = load_mp_export_(L, S)
         L.time_GPS = double(S.GPS_0(:,2)) / 1e6;
     else
         L.time_GPS = [];
+    end
+
+    % Magnetômetro (matriz MAG_0) — opcional
+    % Colunas: [LineNo, TimeUS, I, MagX, MagY, MagZ, OfsX, OfsY, OfsZ, MOX, MOY, MOZ, Health, S]
+    if isfield(S, 'MAG_0') && ~isstruct(S.MAG_0)
+        L.time_MAG = double(S.MAG_0(:,2)) / 1e6;
+        L.magX = double(S.MAG_0(:,4));
+        L.magY = double(S.MAG_0(:,5));
+        L.magZ = double(S.MAG_0(:,6));
+    else
+        L.time_MAG = []; L.magX = []; L.magY = []; L.magZ = [];
     end
 end

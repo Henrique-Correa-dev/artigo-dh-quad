@@ -6,7 +6,8 @@
       "Bash(pdflatex -interaction=nonstopmode main.tex)",
       "Bash(brew install poppler)",
       "Bash(brew list poppler)",
-      "Bash(pdfinfo /Users/graest/ita-master/artigo/artigo-dh-quad/uavbook.pdf)"
+      "Bash(pdfinfo /Users/graest/ita-master/artigo/artigo-dh-quad/uavbook.pdf)",
+      "Bash(grep -v \"m/s\\\\$\\\\^2\\\\$\")"
     ]
   }
 }

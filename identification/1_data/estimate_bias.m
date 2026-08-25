@@ -9,13 +9,13 @@ function B = estimate_bias(L, opts)
 %                       durante pelo menos min_duration segundos
 %
 %   2. Em cada janela calma, calcula:
-%      bias_gyro_xyz  = mediana(gyro)                (drone NÃO está rotacionando)
-%      bias_accel_xyz = mediana(accel) - g_body      (drone em equilíbrio com g)
+%      bias_gyro_xyz  = media(gyro)                (drone NÃO está rotacionando)
+%      bias_accel_xyz = media(accel) - g_body      (drone em equilíbrio com g)
 %
 %      onde g_body = R(phi,theta)' * [0;0;g] projeta a gravidade no body frame
 %      usando a atitude do EKF (que está bem mais limpa que integrar gyro).
 %
-%   3. Combina TODAS as janelas via mediana ponderada por número de amostras.
+%   3. Combina TODAS as janelas via média ponderada por número de amostras.
 %
 %   4. Reporta std entre janelas (indicador de qualidade).
 %
@@ -116,7 +116,7 @@ if n_windows == 0
     return;
 end
 
-%% 4. Para cada janela, calcular bias parcial (mediana robusta)
+%% 4. Para cada janela, calcular bias parcial (média aritmética)
 gyro_per_win  = zeros(n_windows, 3);
 accel_per_win = zeros(n_windows, 3);
 n_samp_per_win = zeros(n_windows, 1);
@@ -126,12 +126,12 @@ for w = 1:n_windows
     idx_w = (t >= seg_start(w)) & (t <= seg_end(w));
     n_samp_per_win(w) = sum(idx_w);
 
-    % gyro bias = mediana do gyro (drone parado)
-    gyro_per_win(w,:) = median(gyr(idx_w, :), 1);
+    % gyro bias = média do gyro (drone parado)
+    gyro_per_win(w,:) = mean(gyr(idx_w, :), 1);
 
-    % accel bias = mediana(acc) - g_body_projetada(atitude_EKF)
-    phi_w = median(phi(idx_w));
-    theta_w = median(theta(idx_w));
+    % accel bias = média(acc) - g_body_projetada(atitude_EKF)
+    phi_w = mean(phi(idx_w));
+    theta_w = mean(theta(idx_w));
     % Gravidade no body frame (NED com z pra baixo):
     %   g_body = R_b/i · g_inertial,  g_inertial = [0;0;+g]
     %   g_body_x = -g·sin(theta)
@@ -142,7 +142,7 @@ for w = 1:n_windows
     % Em equilíbrio (a_linear = 0): a_imu = -g_body
     g_body = [-opts.g*sin(theta_w); opts.g*sin(phi_w)*cos(theta_w); opts.g*cos(phi_w)*cos(theta_w)];
     expected_acc = -g_body;
-    accel_per_win(w,:) = median(acc(idx_w, :), 1) - expected_acc';
+    accel_per_win(w,:) = mean(acc(idx_w, :), 1) - expected_acc';
 
     % Tipo da janela
     if ~isempty(opts.windows_manual)
@@ -154,14 +154,12 @@ for w = 1:n_windows
     end
 end
 
-%% 5. Bias agregado (mediana ponderada por n_samples)
-% Para mediana ponderada simples: repetir cada janela n_samp vezes e tirar mediana
-gyro_expanded  = expand_for_median(gyro_per_win,  n_samp_per_win);
-accel_expanded = expand_for_median(accel_per_win, n_samp_per_win);
+%% 5. Bias agregado (média ponderada por n_samples)
+% Média ponderada pelo número de amostras de cada janela
 
 B = struct();
-B.gyro       = median(gyro_expanded, 1)';
-B.accel      = median(accel_expanded, 1)';
+B.gyro       = (n_samp_per_win(:)' * gyro_per_win  / sum(n_samp_per_win))';
+B.accel      = (n_samp_per_win(:)' * accel_per_win / sum(n_samp_per_win))';
 B.gyro_std   = std(gyro_per_win, 0, 1)';
 B.accel_std  = std(accel_per_win, 0, 1)';
 B.n_windows  = n_windows;

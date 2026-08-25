@@ -1,0 +1,17 @@
+identification_backup/
+identification/outputs/diag/*/*.png
+identification/outputs/diag/*.log
+identification_backup_20260818_pre_aero
+
+# dados brutos e materiais pesados (mantidos localmente)
+data/
+AVL Stuff/
+refs/
+.DS_Store
+*.DS_Store
+dissertacao/*.pdf
+dissertacao/apresentacao/apresentacao.pdf
+dissertacao/*-SAVE-ERROR
+identification/slprj/
+identification/*.slxc
+babyshark_vtol_model/

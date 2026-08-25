@@ -6,8 +6,31 @@ Este trabalho enquadra-se na abordagem de caixa cinza, pois parte da estrutura f
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.7\textwidth]{Cap3/identification2.png}
-    \caption{Modelagem Matemática de um Sistema Físico \cite{Jategaonkar2015}.}
+    \begin{tikzpicture}[
+        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.1cm, minimum width=4.6cm, align=center, font=\small},
+        arr/.style={-{Stealth[length=2.2mm]}, semithick},
+        io/.style={font=\small, align=center},
+        ttl/.style={font=\small\bfseries, anchor=west}
+    ]
+    % ------- a) processo real -------
+    \node[ttl] at (-2.2,1.15) {a) Processo em investigação};
+    \node[blk, font=\small\bfseries] (sys) at (3.2,0) {Sistema Dinâmico};
+    \node[io] (u1) at (-1.2,0) {Entradas\\$u$};
+    \node[io] (z1) at (7.6,0)  {Saídas\\$z$};
+    \draw[arr] (u1) -- (sys);
+    \draw[arr] (sys) -- (z1);
+    % ------- b) modelo -------
+    \node[ttl] at (-2.2,-1.75) {b) Representação do modelo no domínio do tempo};
+    \node[blk, minimum height=2.0cm, bottom color=blue!12] (mod) at (3.2,-3.2)
+        {{\bfseries\color{blue!55!black}Modelo Matemático}\\[2pt]
+         $\dot{x}(t) = f\big(x(t),u(t),\Theta\big)$\\[1pt]
+         $y(t) = g\big(x(t),u(t),\Theta\big)$};
+    \node[io] (u2) at (-1.2,-3.2) {$u$};
+    \node[io] (y2) at (7.6,-3.2)  {$y$};
+    \draw[arr] (u2) -- (mod);
+    \draw[arr] (mod) -- (y2);
+    \end{tikzpicture}
+    \caption{Modelagem Matemática de um Sistema Físico \cite[Adaptado de][]{Jategaonkar2015}.}
     \label{identification-model}
 \end{figure}
 
@@ -19,8 +42,39 @@ A segunda abordagem é a identificação em malha aberta dentro do sistema contr
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.8\textwidth]{Cap3/identification.png}
-    \caption{Identificação de Sistemas Instáveis com Controlador \cite{Jategaonkar2015}.}
+    \resizebox{0.95\textwidth}{!}{%
+    \begin{tikzpicture}[
+        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.3cm, minimum width=2.7cm, align=center, font=\small},
+        sum/.style={circle, draw=black!70, semithick, top color=white, bottom color=black!12, minimum size=0.6cm, font=\normalsize},
+        arr/.style={-{Stealth[length=2.2mm]}, semithick},
+        dbl/.style={{Stealth[length=2.2mm]}-{Stealth[length=2.2mm]}, semithick},
+        io/.style={font=\small, align=center},
+        lbl/.style={font=\footnotesize, inner sep=2pt},
+        dot/.style={circle, fill, inner sep=0pt, minimum size=3.2pt}
+    ]
+    % ------- malha -------
+    \node[io] (cmd) at (-0.85,0.3) {Comando\\$\delta_p$};
+    \node[blk] (ctrl) at (2.6,0) {Controlador\\$\mathbf{G}$};
+    \node[blk] (air)  at (8.0,0) {Aeronave\\$\mathbf{H}$};
+    \node[sum] (ns) at (10.8,0) {$\Sigma$};
+    \node[io, text=red!65!black] (ru) at (10.8,1.3) {ruído $v$};
+    \node[dot] (tz) at (11.9,0) {};
+    \node[io] (z) at (13.3,0) {Resposta\\$z$};
+    \draw[arr] (cmd) -- ([yshift=0.3cm]ctrl.west);
+    \draw[arr] (ctrl) -- node[lbl, below, pos=0.35] {$u$} (air);
+    \draw[arr] (air) -- node[lbl, above, pos=0.45] {$y$} node[lbl, below, pos=0.85] {$+$} (ns);
+    \draw[arr] (ru) -- node[lbl, right, pos=0.65] {$+$} (ns);
+    \draw[arr] (ns) -- (z);
+    \draw[arr] (tz) -- (11.9,-1.6) -- (1.0,-1.6) -- (1.0,-0.3) -- ([yshift=-0.3cm]ctrl.west);
+    % ------- faixas de identificacao -------
+    \draw[dashed, semithick, black!60] (-0.1,0.55) -- (-0.1,3.15);
+    \draw[dashed, semithick, black!60] (11.9,0.55) -- (11.9,3.15);
+    \draw[dashed, semithick, black!60] (4.35,0.55) -- (4.35,2.25);
+    \draw[dbl] (-0.1,2.9) -- node[fill=white, font=\footnotesize] {Identificação em malha fechada} (11.9,2.9);
+    \draw[dbl] (4.35,2.0) -- node[fill=white, font=\footnotesize] {Identificação em malha aberta ($\hat{\mathbf{H}}$)} (11.9,2.0);
+    \end{tikzpicture}%
+    }
+    \caption{Identificação de Sistemas Instáveis com Controlador \cite[Adaptado de][]{Jategaonkar2015}.}
     \label{identification-diagram}
 \end{figure}
 
@@ -30,8 +84,64 @@ A metodologia de identificação sugerida por \textcite{Jategaonkar2015} é o M4
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.8\textwidth]{Cap3/m4v.png}
-    \caption{Diagrama da metodologia de identificação M4V \cite{Jategaonkar2015}.}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.05cm, minimum width=2.6cm, align=center, font=\small},
+        sum/.style={circle, draw=black!70, semithick, top color=white, bottom color=black!12, minimum size=0.55cm, font=\normalsize},
+        arr/.style={-{Stealth[length=2.2mm]}, semithick},
+        io/.style={font=\small, align=center},
+        lbl/.style={font=\footnotesize, inner sep=2pt, align=center},
+        mtt/.style={font=\small\bfseries, anchor=south west, inner sep=1pt},
+        dot/.style={circle, fill, inner sep=0pt, minimum size=3.2pt}
+    ]
+    % ================= contêiner da estimação =================
+    \draw[semithick, black!60, fill=yellow!15, rounded corners=4pt] (3.4,0.55) rectangle (13.7,5.05);
+    \node[font=\small\bfseries, text=blue!55!black, anchor=north east] at (12.45,4.95) {Estimação de Parâmetros};
+    % ================= linha superior =================
+    \node[mtt] at (-1.45,6.85) {\textcolor{red!70!black}{M}anobra};
+    \node[blk] (ent) at (-0.15,6.25) {Entrada\\otimizada};
+    \node[blk] (vei) at (5.0,6.25) {Aeronave\\em voo};
+    \node[mtt] at (8.0,6.95) {\textcolor{red!70!black}{M}edições};
+    \node[blk, minimum width=3.2cm] (med) at (9.7,6.25) {Coleta de dados\\e compatibilidade};
+    \node[dot] (d1) at (3.0,6.25) {};
+    \draw[arr] (ent) -- node[lbl, above, pos=0.35] {Entrada} (vei);
+    \draw[arr] (vei) -- node[lbl, above] {Resposta\\real} (med);
+    \draw[arr] (d1) -- (3.0,5.45) -- (8.7,5.45) -- ([xshift=-1.0cm]med.south);
+    \node[dot] at (3.0,5.45) {};
+    % ================= metodos, criterios, soma =================
+    \node[mtt] at (4.55,4.35) {\textcolor{red!70!black}{M}étodos};
+    \node[blk, minimum width=3.0cm, bottom color=orange!25] (alg) at (6.05,3.6) {Algoritmo de\\estimação / otimização};
+    \node[blk] (cri) at (10.0,3.6) {Critérios de\\identificação};
+    \node[sum] (er) at (12.95,3.6) {$\Sigma$};
+    \draw[arr] (med.east) -- (12.95,6.25) -- node[lbl, right, pos=0.85] {$+$} (er);
+    \draw[arr] (er) -- node[lbl, below, yshift=-2pt] {Erro de\\resposta} (cri);
+    \draw[arr] (cri) -- (alg);
+    % ================= modelos =================
+    \node[mtt] at (4.55,2.35) {\textcolor{red!70!black}{M}odelos};
+    \node[blk, minimum width=3.0cm, minimum height=1.2cm, bottom color=blue!12] (mod) at (6.05,1.55) {Modelo matemático /\\\textcolor{violet!80!black}{simulação}};
+    \draw[arr] ([xshift=0.7cm]alg.south) -- node[lbl, right, pos=0.45] {Ajustes de\\parâmetros} ([xshift=0.7cm]mod.north);
+    \draw[arr] (mod.east) -- node[lbl, above, pos=0.55] {Resposta do modelo} (12.95,1.55) -- node[lbl, right, pos=0.6] {$-$} (er);
+    % ================= entrada no modelo =================
+    \draw[arr] (d1) -- (3.0,1.85) -- ([yshift=0.3cm]mod.west);
+    % ================= coluna a priori =================
+    \draw[semithick, black!60, fill=black!4, rounded corners=4pt] (-1.75,0.55) rectangle (1.75,5.05);
+    \node[blk, minimum width=2.9cm, minimum height=1.3cm] (apr) at (0,3.75) {Valores \textit{a priori},\\limites inferior\\e superior};
+    \node[blk, minimum width=2.9cm] (str) at (0,1.35) {Estrutura\\do modelo};
+    \draw[arr] (apr.east) -- (alg.west |- apr.east);
+    \draw[arr] (str.east) -- (mod.west |- str.east);
+    % ================= fases =================
+    \draw[dashed, semithick] (-1.9,-0.15) -- (13.8,-0.15);
+    \node[font=\footnotesize\bfseries, text=red!70!black, anchor=south east] at (13.75,-0.05) {Fase de identificação};
+    \node[font=\footnotesize\bfseries, text=red!70!black, anchor=north east] at (13.75,-0.25) {Fase de validação};
+    % ================= validacao =================
+    \node[blk] (val) at (6.05,-1.55) {Validação\\do modelo};
+    \node[io] (dvc) at (2.6,-1.55) {Dados de voo\\complementares};
+    \draw[arr] ([xshift=-0.3cm]mod.south) -- ([xshift=-0.3cm]val.north);
+    \draw[arr] ([xshift=0.3cm]val.north) -- ([xshift=0.3cm]mod.south);
+    \draw[arr] (dvc) -- (val);
+    \end{tikzpicture}%
+    }
+    \caption{Diagrama da metodologia de identificação M4V \cite[Adaptado de][]{Jategaonkar2015}.}
     \label{m4v}
 \end{figure}
 
@@ -45,9 +155,9 @@ Essas etapas, detalhadas nas subseções a seguir, são:
     \item \textbf{Validação} (\textit{Validation}).
 \end{itemize}
 
-\subsection{Definição de manobras (Maneuvers)}
+\subsection{Definição de manobras (\textit{Maneuvers})}
 
-Diferentemente das aeronaves de asa fixa, que podem ser excitadas em torno de uma condição de voo trimada e naturalmente estável, o quadrirrotor é instável e opera em malha fechada, estabilizado por um controlador em torno do voo pairado. A excitação não é aplicada diretamente à planta, mas injetada como uma entrada exógena, somada à saída do controlador.  Portanto, \textcite{Jategaonkar2015} sugere que as manobras sejam aplicadas um eixo de cada vez, procedimento denominado \textit{separate surface excitation} a qual reduz significantemente a correlação que a realimentação impõe entre entrada e estados, vale ressaltar que este procedimento é determinado para um modelo de asa-fixa, mas utilizado como base teórica para definição de manobras com o multirrotor controlado. Para que a dinâmica de cada eixo seja isolada e identificável, a excitação precisa ser suficientemente diferenciada do equilíbrio, pois, se a entrada for pequena, o controlador suprime o transitório e mascara a planta \cite{Jategaonkar2015}.
+Diferentemente das aeronaves de asa fixa, que podem ser excitadas em torno de uma condição de voo \textit{trimada} e naturalmente estável, o quadrirrotor é instável e opera em malha fechada, estabilizado por um controlador em torno do voo pairado. Assim, a excitação não pode ser aplicada diretamente à planta. Neste trabalho, ela é introduzida pelo piloto como comandos de referência pelos canais de rádio, que o controlador combina com a ação de estabilização antes de convertê-los em comandos aos motores, conforme a cadeia de excitação detalhada adiante. Nesse contexto, \textcite{Jategaonkar2015} sugere que as manobras sejam aplicadas a um eixo de cada vez, procedimento denominado \textit{separate surface excitation}, que reduz significativamente a correlação que a realimentação impõe entre entrada e estados. Vale ressaltar que esse procedimento foi concebido para aeronaves de asa fixa, nas quais o sinal de excitação é somado diretamente à saída do controlador, na superfície de comando, mas serve de base teórica para a definição das manobras com o multirrotor controlado. Para que a dinâmica de cada eixo seja isolada e identificável, a excitação precisa ser suficientemente diferenciada do equilíbrio, pois, se a entrada for pequena, o controlador suprime o transitório e mascara a planta \cite{Jategaonkar2015}.
 
 Cabe ressaltar que, em voo pairado, cada taxa angular obedece a uma dinâmica de primeira ordem, enquanto atitude e velocidade formam uma cadeia de integradores acoplados pela gravidade, origem da instabilidade que torna a malha fechada necessária. Por isso, a frequência $\omega_n$ empregada no dimensionamento da manobra deve ser entendida como a frequência característica do canal que se deseja identificar, onde a banda da dinâmica de taxa é governada por $c_p,c_q,c_r$ e pela efetividade de controle, e não como um período curto aerodinâmico.
 
@@ -55,16 +165,54 @@ Distinguem-se, dessa forma, três sinais ao longo da cadeia de excitação: O co
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=1\textwidth]{Cap3/entradas.png}
-    \caption{Cadeia de excitação do VTOL.}
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.2cm, align=center, font=\small},
+        sub/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=0.72cm, text width=3.4cm, align=center, font=\footnotesize},
+        tag/.style={rectangle, draw=orange!50, semithick, rounded corners=2pt, fill=orange!25, minimum height=0.7cm, align=center, font=\small, inner xsep=8pt},
+        arr/.style={-{Stealth[length=2.2mm]}, semithick},
+        rarr/.style={-{Stealth[length=2.2mm]}, semithick, red!75!black},
+        io/.style={font=\small},
+        lbl/.style={font=\footnotesize, inner sep=2pt}
+    ]
+    % ================= moldura VTOL (fundo) =================
+    \draw[dashed, semithick, red!75!black] (8.12,0.8) -- (8.12,1.65) -- (18.9,1.65) -- (18.9,-2.35) -- (8.12,-2.35) -- (8.12,-0.8);
+    \draw[semithick, red!75!black] (8.45,-2.1) rectangle (18.6,-1.5);
+    \node[font=\small\bfseries, text=red!75!black] at (13.5,-1.8) {Drone Híbrido};
+    % ================= cadeia principal =================
+    \node[io] (sp) at (-0.8,0.35) {$\boldsymbol{\sigma}_p$};
+    \node[blk, text width=2.4cm] (ctrl) at (1.8,0) {Controlador\\$\mathbf{G}$};
+    \node[blk, text width=3.2cm] (aloc) at (5.3,0) {Matriz de Alocação\\$\mathbf{B}^{-1}$};
+    \draw[semithick, black!70, rounded corners=3pt, fill=black!3] (8.3,-1.2) rectangle (12.5,1.35);
+    \node[font=\footnotesize\bfseries] at (10.4,1.05) {Modelo do Motor};
+    \node[sub] (prop) at (10.4,0.38) {Modelo de Propulsão};
+    \node[sub] (amot) at (10.4,-0.5) {Alocação dos Motores $\mathbf{B}$};
+    \node[blk, text width=3.2cm] (sys) at (16.9,0) {Sistema Dinâmico\\$\mathbf{H}$};
+    \draw[arr] (sp) -- ([yshift=0.35cm]ctrl.west);
+    \draw[arr] (ctrl) -- (aloc);
+    \foreach \dy in {0.45,0.15,-0.15,-0.45}{
+        \draw[arr] ([yshift=\dy cm]aloc.east) -- (8.3,\dy);}
+    \node[lbl] at (7.6,0.82) {$\boldsymbol{\sigma}_i$};
+    \draw[arr] (12.5,0) -- node[lbl, above] {$[\,T\ \tau_x\ \tau_y\ \tau_z\,]^{\mathsf{T}}$} (sys.west);
+    \draw[arr] (sys.east) -- (19.25,0) -- (19.25,-2.6) -- (0.1,-2.6) -- (0.1,-0.35) -- ([yshift=-0.35cm]ctrl.west);
+    % ================= anotações =================
+    \node[tag] (tcmd) at (-0.8,2.2) {Comando};
+    \draw[rarr] (tcmd) -- (-0.8,0.75);
+    \node[tag] (tpwm) at (7.6,2.2) {PWM};
+    \draw[rarr] (tpwm) -- (7.6,1.12);
+    \node[tag] (tfm) at (13.9,2.35) {Forças e Momentos};
+    \draw[rarr] (tfm) -- (13.9,0.62);
+    \end{tikzpicture}%
+    }
+    \caption{Cadeia de excitação do drone híbrido.}
     \label{cadeia}
 \end{figure}
 
 em que $T_i$ e $Q_i$ são o empuxo e o torque de reação do $i$-ésimo rotor, obtidos do comando $\sigma_i$ pelo modelo de motor do Capítulo~2. A entrada efetivamente analisada na avaliação da manobra é o momento $\tau$ do eixo excitado, e não o PWM bruto nem o comando do piloto.
 
-Com a entrada definida, segue-se para a escolha da manobra, a qual parte de um critério bem determinado, pois, como o objetivo é estimar os parâmetros físicos da planta, e não reproduzir o comportamento comando-resposta, a manobra existe para tornar os dados informativos sobre esses parâmetros. Segundo Tischler e Remple (2012), estimativas precisas exigem minimizar a covariância das estimativas, limitada inferiormente pelo limite de Cramér-Rao (a inversa da matriz de informação de Fisher), o que equivale a maximizar a informação contida nos dados. Esta informação significa que a energia está alocada na frequência certa, ou seja, cada derivada é identificável numa banda em torno da frequência característica do seu canal, de modo que a manobra deve concentrar energia nessa banda e quase nenhuma em frequência zero, neste contexto, duas manobras são detalhadas por \textcite{Jategaonkar2015}, o doublet e o 3-2-1-1, para excitação de dinâmicas para aeronaves de asa-fixa, mas também são aplicáveis para multirrotor.
+Com a entrada definida, segue-se para a escolha da manobra, que parte de um critério bem determinado. Como o objetivo é estimar os parâmetros físicos da planta, e não reproduzir o comportamento comando-resposta, a manobra existe para tornar os dados informativos sobre esses parâmetros. Segundo \textcite{Tischler2012}, estimativas precisas exigem minimizar a covariância das estimativas, limitada inferiormente pelo limite de Cramér-Rao, a inversa da matriz de informação de Fisher, o que equivale a maximizar a informação contida nos dados. Na prática, isso significa alocar a energia da excitação na frequência certa: cada derivada é identificável em uma banda em torno da frequência característica do seu canal, de modo que a manobra deve concentrar energia nessa banda e quase nenhuma em frequência zero. Nesse contexto, \textcite{Jategaonkar2015} detalha duas manobras, o \textit{doublet} e o 3-2-1-1, concebidas para a excitação de aeronaves de asa fixa, mas igualmente aplicáveis ao multirrotor.
 
-As restrições práticas estreitam as opções das manobras, pois, por ser um voo controlado em torno do hover, a manobra deve manter a resposta na faixa linear (amplitude limitada, sem saturar atuador), retornar ao trim e ser repetível entre eixos e ensaios. Esses requisitos penalizam o 3-2-1-1, o qual embora possua banda mais larga, sua maior energia provoca grandes excursões, indesejáveis na vizinhança do hover, e é de difícil aplicação em tempos curtos, exatamente o que \textcite{Sato2021} constatou. O doublet satisfaz todos os requisitos simultaneamente: simétrico (energia nula em frequência zero, devolve a aeronave ao hover), com energia concentrada (boa relação sinal-ruído com amplitude modesta), sintonizável ao canal e simples de comandar de forma repetível. Sua única limitação é a banda mais estreita, que torna a sintonia de $\Delta t$ mais crítica, algo que é mitigada pelo modelo já construído com valores a priori, que fornece um $\omega_n$ suficientemente bom para o dimensionamento \cite{Jategaonkar2015, Tischler2012}.
+As restrições práticas estreitam as opções de manobra. Por se tratar de um voo controlado em torno do voo pairado, a manobra deve manter a resposta na faixa linear, com amplitude limitada e sem saturar os atuadores, retornar à condição de equilíbrio e ser repetível entre eixos e ensaios. Esses requisitos penalizam o 3-2-1-1, que, embora possua banda mais larga, provoca grandes excursões pela sua maior energia, indesejáveis na vizinhança do voo pairado, e é de difícil aplicação em tempos curtos, como constatou \textcite{Sato2021}. O \textit{doublet}, por sua vez, satisfaz todos os requisitos simultaneamente. É simétrico, com energia nula em frequência zero, o que devolve a aeronave ao voo pairado. Concentra energia na banda do canal, garantindo boa relação sinal-ruído com amplitude modesta. É sintonizável ao canal e simples de comandar de forma repetível. Sua única limitação é a banda mais estreita, que torna a sintonia de $\Delta t$ mais crítica. Essa limitação é mitigada pelo modelo já construído com valores \textit{a priori}, que fornece um $\omega_n$ suficientemente bom para o dimensionamento \cite{Jategaonkar2015, Tischler2012}.
 
 \begin{figure}[ht]
     \centering
@@ -73,11 +221,11 @@ As restrições práticas estreitam as opções das manobras, pois, por ser um v
     \label{doublet}
 \end{figure}
 
-Portanto, a manobra adotada neste trabalho é o \textbf{doublet}, onde o comando é deslocado abruptamente em um sentido, mantido por um intervalo $\Delta t$, deslocado por igual intervalo no sentido oposto e, então, retornado à posição neutra. 
+Portanto, a manobra adotada neste trabalho é o \textit{doublet}, em que o comando é deslocado abruptamente em um sentido, mantido por um intervalo $\Delta t$, deslocado por igual intervalo no sentido oposto e, então, retornado à posição neutra. 
 \begin{itemize}
-    \item doublet no eixo de rolagem (excita a dinâmica de $p$),
-    \item doublet no eixo de arfagem (excita $q$),
-    \item doublet no eixo de guinada (excita $r$).
+    \item \textit{doublet} no eixo de rolagem (excita a dinâmica de $p$),
+    \item \textit{doublet} no eixo de arfagem (excita $q$),
+    \item \textit{doublet} no eixo de guinada (excita $r$).
 \end{itemize}
 
 Trata-se de um sinal simétrico, cuja energia se concentra em torno de uma frequência que varia com $\Delta t$, conforme ilustra a Figura \ref{doublet}, o pico ocorre na frequência normalizada $\omega_n \Delta t \approx 2{,}3$, o que permite dimensionar a manobra a partir da frequência característica $\omega_n$ do canal a identificar \cite{Jategaonkar2015}:
@@ -87,16 +235,18 @@ Trata-se de um sinal simétrico, cuja energia se concentra em torno de uma frequ
 \label{eq:doublet-dt}
 \end{equation}
 
-Na prática, adota-se a regra simplificada $2\Delta t_{db} \approx T$. Em torno do pico, o doublet apresenta largura de banda de aproximadamente $1{:}3$, faixa adequada para a estimação das derivadas de estabilidade e controle.
+Na prática, adota-se a regra simplificada $2\Delta t_{db} \approx T$. Em torno do pico, o \textit{doublet} apresenta largura de banda de aproximadamente $1{:}3$, faixa adequada para a estimação das derivadas de estabilidade e controle.
 
-Em malha fechada, essas propriedades tornam-se ainda mais desejáveis. As reversões abruptas do doublet injetam energia rapidamente e exploram a resposta inicial da planta, antes de a realimentação reagir, mecanismo que \textcite{Jategaonkar2015} aponta como o que carrega a informação em malha fechada, enquanto a simetria e a curta duração mantêm as excursões pequenas, evitando a saturação do controlador.
+Em malha fechada, essas propriedades tornam-se ainda mais desejáveis. As reversões abruptas do \textit{doublet} injetam energia rapidamente e exploram a resposta inicial da planta, antes de a realimentação reagir. Segundo \textcite{Jategaonkar2015}, é esse mecanismo que carrega a informação sobre a planta em malha fechada. A simetria e a curta duração da manobra, por sua vez, mantêm as excursões pequenas e evitam a saturação do controlador.
 
-Por fim, deve-se analisar a relação ruído-sinal, e o isolamento do sinal de cada eixo. Para isso é feita uma avaliação de cada janela de entrada, verificando-se o ruído de medição de cada eixo dos sensores, o qual é estimado de forma robusta a partir do resíduo de alta frequência do sinal, sendo esta a diferença entre a taxa medida $\omega_i$ e sua versão suavizada por um filtro Savitzky--Golay:
+Por fim, deve-se analisar a relação sinal-ruído e o isolamento do sinal de cada eixo. Para isso, avalia-se cada janela de entrada, verificando-se o ruído de medição de cada eixo dos sensores. Esse ruído é estimado de forma robusta a partir do resíduo de alta frequência do sinal, definido como a diferença entre a taxa medida $\omega_i$ e sua versão suavizada por um filtro de Savitzky--Golay:
 \begin{equation}
     \qquad e_i = \omega_i - \mathrm{SG}(\omega_i),
     \label{eq:ruido2}
 \end{equation}
-em que $\omega_i \in \{p,q,r\}$ é a taxa angular medida e o fator $1{,}4826$ converte o \textit{MAD} em um estimador do desvio-padrão de um ruído gaussiano $\sigma_{\eta,i}$, insensível aos transitórios da manobra. 
+em que $\omega_i \in \{p,q,r\}$ é a taxa angular medida e o fator $1{,}4826$ converte o \textit{MAD} em um estimador do desvio-padrão de um ruído gaussiano $\sigma_{\eta,i}$, insensível aos transitórios da manobra.
+
+Cabe comentar a influência do filtro sobre o sinal amostrado. O filtro de Savitzky--Golay empregado ajusta um polinômio de segunda ordem a uma janela de sete amostras, o que, na grade de $10$~Hz, corresponde a $0{,}7$~s e a uma frequência de corte efetiva próxima de $2$~Hz. Assim, ele preserva a banda das manobras, concentrada em torno de $1$~Hz, e atenua apenas o conteúdo acima dela, sem introduzir atraso de fase, por ser simétrico. Nesta etapa, contudo, o filtro não é usado para tratar o sinal, mas para separá-lo em duas parcelas: a versão suavizada, que retém a dinâmica de interesse, e o resíduo, que concentra o ruído de medição fora da banda. É sobre esse resíduo que se estima $\sigma_{\eta,i}$, de modo que a métrica de relação sinal-ruído compara a energia da resposta à manobra com a do ruído que efetivamente compete com ela na estimação. O tratamento dos sinais para a identificação, com o mesmo filtro aplicado a entradas e saídas, é descrito na Seção~\ref{sec:measurements}.
 \begin{equation}
     \sigma_{\eta,i} = 1{,}4826 \cdot \operatorname{med}\big|\, e_i - \operatorname{med}(e_i) \,\big|
     \label{eq:ruido1}
@@ -137,16 +287,17 @@ Em síntese, a teoria define critérios objetivos que uma boa manobra deve satis
     \item \textbf{Relação sinal--ruído:} razão $\geq 3$ entre a resposta devida à entrada e a devida ao ruído \cite{Jategaonkar2015};
     \item \textbf{Isolamento entre eixos:} excitação concentrada no eixo-alvo, com os demais quase inertes;
     \item \textbf{Faixa linear:} excursões pequenas, preservando a validade do modelo linearizado, sem saturar atuadores;
-    \item \textbf{Retorno ao trim:} a simetria do doublet devolve a aeronave ao hover;
+    \item \textbf{Retorno ao equilíbrio:} a simetria do \textit{doublet} devolve a aeronave ao voo pairado;
     \item \textbf{Repetibilidade:} manobra reproduzível de forma consistente entre ensaios.
 \end{itemize}
 
 
-\subsection{Aquisição de dados de saída (Measurements)}
+\subsection{Aquisição de dados de saída (\textit{Measurements})}
+\label{sec:measurements}
 
 A segunda etapa do M4V trata da obtenção e do condicionamento dos sinais medidos em voo. Seu objetivo é converter o dado bruto registrado pelos sensores em sinais limpos, uniformemente amostrados e livres de erros sistemáticos, e verificar a compatibilidade cinemática entre as grandezas medidas, garantindo que sejam mutuamente consistentes antes de alimentar o estimador. A exatidão das estimativas depende diretamente da qualidade dessas medidas, de modo que esta etapa é tão determinante quanto a escolha da manobra \cite{Jategaonkar2015, Tischler2012}. A Figura~\ref{fig:pipeline-dados} resume a cadeia de processamento, do log bruto ao vetor de medidas $z$.
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{Cap3/measure.png}
     \caption{Cadeia de aquisição e tratamento dos dados de voo.}
@@ -173,11 +324,11 @@ Comando do piloto & $\boldsymbol{\sigma_P}$ & RCIN & entrada exógena (avaliaç�
 \end{tabular}
 \end{table}
 
-Inicialmente trata-se a diferença entre as taxas de amostragem e tempos das amostras de todos os sensores. Pelo critério de Nyquist, a taxa de aquisição deve ser de, no mínimo, o dobro da maior frequência de interesse \cite{Jategaonkar2015}. Como a dinâmica de taxa do quadrirrotor concentra-se abaixo de aproximadamente $2$~Hz, adotou-se uma grade comum de $10$~Hz ($\Delta t = 0{,}1$~s), cerca de cinco vezes a banda do canal, mesma ordem de grandeza empregada por \textcite{Sato2021}, que utilizou $10$~Hz. Embora referências para aeronaves tripuladas recomendem $20$--$25$~Hz \cite{Jategaonkar2015}, para a banda de interesse deste trabalho $10$~Hz é suficiente para representar a dinâmica sem perda de informação.
+Inicialmente trata-se a diferença entre as taxas de amostragem e tempos das amostras de todos os sensores. Pelo critério de Nyquist, a taxa de aquisição deve ser de, no mínimo, o dobro da maior frequência de interesse, pois a frequência de Nyquist, metade da taxa de amostragem, marca o início da banda de rejeição do sinal digitalmente amostrado: componentes acima dela não são representadas sem distorção \cite{Jategaonkar2015}. Como a dinâmica de taxa do quadrirrotor concentra-se abaixo de aproximadamente $2$~Hz, adotou-se uma grade comum de $10$~Hz ($\Delta t = 0{,}1$~s), cerca de cinco vezes a banda do canal, mesma ordem de grandeza empregada por \textcite{Sato2021}, que utilizou $10$~Hz. Embora referências para aeronaves tripuladas recomendem $20$--$25$~Hz \cite{Jategaonkar2015}, a grade adotada é adequada à banda de interesse deste trabalho.
 
-Mesmo com sensores calibrados, persistem erros sistemáticos bias (deslocamento de zero) e fator de escala\cite{Jategaonkar2015, Sato2021}. O \textit{bias} dos sensores inerciais é estimado em janelas calmas (aeronave em repouso no solo ou em voo pairado estável): o do giroscópio é a mediana das taxas medidas (corpo sem rotação), e o do acelerômetro é a diferença entre a leitura mediana e a gravidade projetada no referencial do corpo pela atitude do EKF \cite{Jategaonkar2015}.
+Os sensores inerciais apresentam erros sistemáticos, como o \textit{bias}, que precisam ser estimados e corrigidos antes da identificação \cite{Jategaonkar2015, Sato2021}. O \textit{bias} é estimado em janelas calmas (aeronave em repouso no solo ou em voo pairado estável): o do giroscópio é a média das taxas medidas (corpo sem rotação), e o do acelerômetro é a diferença entre a leitura média e a gravidade projetada no referencial do corpo pela atitude do EKF \cite{Jategaonkar2015}.
 
-Para suprimir o ruído de alta frequência, não correlacionado com a dinâmica de interesse, aplica-se um filtro digital de Savitzky--Golay, o mesmo já empregado na avaliação das manobras na Equação~\eqref{eq:ruido2}. Por ser simétrico, esse filtro não introduz atraso de fase \cite{Jategaonkar2015}. O ponto essencial é que o \emph{mesmo} filtro é aplicado tanto à entrada (PWM) quanto à saída ($p,q,r,a$): como um filtro linear comuta com um sistema linear, esse procedimento preserva a relação entrada--saída e não cria defasagem relativa entre os sinais \cite{Tischler2012}.
+Para suprimir o ruído de alta frequência, não correlacionado com a dinâmica de interesse, aplica-se um filtro digital de Savitzky--Golay, o mesmo já empregado na avaliação das manobras na Equação~\eqref{eq:ruido2}. Por ser simétrico, esse filtro não introduz atraso de fase \cite{Jategaonkar2015}. O ponto essencial é que o mesmo filtro é aplicado tanto à entrada (PWM) quanto à saída ($p,q,r,a$): como um filtro linear comuta com um sistema linear, esse procedimento preserva a relação entrada--saída e não cria defasagem relativa entre os sinais \cite{Tischler2012}.
 
 O filtro de Savitzky--Golay ajusta, a cada instante $t_k$, um polinômio de grau $n$ a uma janela simétrica de $N = 2M+1$ amostras vizinhas por mínimos quadrados, substituindo a amostra central pelo valor ajustado. Reunindo a janela em $\mathbf{x}_k = [\,x_{k-M},\dots,x_{k+M}\,]^\top$ e o polinômio $p(i) = \sum_{j=0}^{n} a_j\,i^{\,j}$, com o índice $i$ contado a partir do centro da janela, os coeficientes resultam de
 \begin{equation}
@@ -195,7 +346,7 @@ sendo $\mathbf{e}_1 = [\,1,0,\dots,0\,]^\top$ o vetor que extrai o coeficiente $
 
 A aceleração angular não é medida diretamente, sendo obtida por diferenciação numérica das taxas já filtradas \cite{Jategaonkar2015}. Sua inclusão melhora a exatidão e a convergência da estimação e é necessária porque a aceleração angular entra diretamente no modelo do acelerômetro, Equação~\eqref{eq:acc-imu}, por meio do braço de alavanca da IMU. 
 
-A Figura~\ref{fig:medidas-bias} ilustra o efeito da filtragem e da diferenciação no domínio do tempo, bem como a correção do bias, em um trecho do log de voo em que o drone está parado, e a Figura~\ref{fig:medidas-espectro}, apresenta a processamento dos dados medidos no intervalo de 605 s à 625 s.
+A Figura~\ref{fig:medidas-bias} ilustra a correção do \textit{bias} em um trecho do log em que o drone está parado, comparando as leituras brutas a $25$~Hz com as tratadas. A Figura~\ref{fig:medidas-espectro}, por sua vez, mostra o efeito do processamento em um intervalo de voo com manobras, de $605$ a $625$~s: o sinal bruto a $25$~Hz aparece em cinza e o sinal reamostrado a $10$~Hz e filtrado, em cor. Observa-se que a filtragem atenua o ruído de alta frequência, mais evidente no acelerômetro, ao passo que os transitórios dos \textit{doublets} nas taxas angulares são preservados em amplitude e em fase, confirmando que a banda das manobras não é afetada pelo tratamento.
 
 \begin{figure}[ht]
     \centering
@@ -207,13 +358,13 @@ A Figura~\ref{fig:medidas-bias} ilustra o efeito da filtragem e da diferenciaç�
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.9\textwidth]{Cap3/medidas_tratamento.png}
-    \caption{Tratamento das medidas: efeito do processamento das medidas em intervalo de voo.}
+    \caption{Tratamento das medidas em intervalo de voo com manobras ($605$--$625$~s): sinal bruto a $25$~Hz (cinza) e sinal reamostrado a $10$~Hz e filtrado (cor).}
     \label{fig:medidas-espectro}
 \end{figure}
 
 Ao final desta etapa, obtém-se o vetor de medidas $z$, velocidades angulares do giroscópio, forças específicas do acelerômetro e atitudes provenientes do EKF da pixhawk, em uma base de tempo uniforme, com erros sistemáticos removidos e consistência cinemática verificada, pronto para o método de identificação descrito a seguir.
 
-\subsection{Identificação com dados pelo método OEM (Methods)}
+\subsection{Identificação com dados pelo método OEM (\textit{Methods})}
 
 A estimação dos parâmetros combina dois métodos complementares no domínio do tempo: o \textit{Equation Error Method} (EEM), a partir de um conjunto de parâmetros iniciais, $\Theta_{\text{0}}$, fornece uma estimativa algébrica dos parâmetros $\Theta_{\text{EEM}}$, e o \textit{Output Error Method} (OEM), que a refina por máxima verossimilhança até otimizar os parâmetros para $\Theta_{\text{OEM}}$ \cite{Jategaonkar2015}. Ambos buscam o vetor de parâmetros $\Theta$ que minimiza os resíduos entre a saída medida $z$ e a saída do modelo $y(\Theta)$.
 
@@ -281,14 +432,14 @@ com $\boldsymbol{\omega} = [p,q,r]^\top$, os parâmetros são obtidos minimizand
 \end{equation}
 em que $W = \mathrm{diag}(1/\sigma_{y_i}^2)$ pondera cada eixo pelo inverso da variância de sua derivada, sendo $\sigma_{y_i}$ o desvio-padrão do canal de saída $i$ (a não confundir com o comando $\sigma_i$ do motor), e $\dot{\boldsymbol{\omega}}_{\text{med}}$ é obtida por diferenciação numérica do sinal suavizado. Com as inércias fixadas, a Equação~\eqref{eq:eem-res} é linear nos ganhos e nos coeficientes de arrasto, tornando \eqref{eq:eem-cost} um problema de mínimos quadrados de solução rápida e robusta. Em contrapartida, o uso das derivadas medidas --- que amplificam o ruído --- introduz viés, razão pela qual o EEM serve como ponto de partida, e não como estimativa final \cite{Jategaonkar2015}.
 
-\textbf{Fase B --- OEM (refinamento).} O OEM elimina esse viés ao comparar a saída \emph{integrada} do modelo com a medição. A partir de $\Theta_{\text{EEM}}$, integra-se o subsistema de taxa no tempo (Runge--Kutta de 4ª ordem) com a mesma entrada aplicada ao veículo, produzindo $y(t_k,\Theta)$; o resíduo é o \emph{erro de saída} $z(t_k) - y(t_k,\Theta)$, conforme ilustra a Figura~\ref{fig:oem-loop}. As saídas $z,y$ reúnem as velocidades angulares $(p,q,r)$ e as forças específicas medidas pela IMU $(a_x,a_y,a_z)$, estas últimas sensíveis ao empuxo total $T$ e, por meio do braço do sensor, à aceleração angular.
+\textbf{Fase B --- OEM (refinamento).} O OEM elimina esse viés ao comparar a saída integrada do modelo com a medição. A partir de $\Theta_{\text{EEM}}$, integra-se o subsistema de taxa no tempo (Runge--Kutta de 4ª ordem) com a mesma entrada aplicada ao veículo, produzindo $y(t_k,\Theta)$; o resíduo é o erro de saída $z(t_k) - y(t_k,\Theta)$, conforme ilustra a Figura~\ref{fig:oem-loop}. As saídas $z,y$ reúnem as velocidades angulares $(p,q,r)$ e as forças específicas medidas pela IMU $(a_x,a_y,a_z)$, estas últimas sensíveis ao empuxo total $T$ e, por meio do braço do sensor, à aceleração angular.
 
 Sob a hipótese de ruído de medição gaussiano com covariância $R$, o OEM é um estimador de máxima verossimilhança: minimiza o custo (log-verossimilhança negativa)
 \begin{equation}
 J(\Theta) = \tfrac{1}{2}\sum_{k=1}^{N} \big[z(t_k) - y(t_k,\Theta)\big]^\top R^{-1} \big[z(t_k) - y(t_k,\Theta)\big].
 \label{eq:oem-cost}
 \end{equation}
-O mínimo é buscado pelo método de Gauss--Newton. Linearizando a saída em torno da estimativa corrente, $y(\Theta + \delta) \approx y(\Theta) + S\,\delta$, com a \emph{matriz de sensibilidades}
+O mínimo é buscado pelo método de Gauss--Newton. Linearizando a saída em torno da estimativa corrente, $y(\Theta + \delta) \approx y(\Theta) + S\,\delta$, com a matriz de sensibilidades
 \begin{equation}
 S(t_k) = \frac{\partial y(t_k,\Theta)}{\partial \Theta},
 \label{eq:sens}
@@ -307,8 +458,48 @@ repetindo-se o ciclo de integrar o modelo, formar o erro de saída, calcular as 
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.65\textwidth]{Cap3/oem_loop.png}
-    \caption{Ciclo iterativo do método do erro de saída \cite{Jategaonkar2015}.}
+    \resizebox{0.92\textwidth}{!}{%
+    \begin{tikzpicture}[
+        blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.0cm, minimum width=3.0cm, align=center, font=\small},
+        sum/.style={circle, draw=black!70, semithick, top color=white, bottom color=black!12, minimum size=0.6cm, font=\normalsize},
+        arr/.style={-{Stealth[length=2.2mm]}, semithick},
+        io/.style={font=\small},
+        lbl/.style={font=\footnotesize, inner sep=2pt},
+        dot/.style={circle, fill, inner sep=0pt, minimum size=3.2pt}
+    ]
+    % ------- mundo real -------
+    \node[io] (ent) at (-0.7,0) {Entrada};
+    \node[dot] (d) at (0.5,0) {};
+    \node[blk, minimum width=6.8cm, font=\small\bfseries] (sys) at (4.85,0) {Sistema Dinâmico};
+    \node[sum] (ns) at (9.6,0) {$\Sigma$};
+    \node[io, text=red!65!black] (ru) at (9.6,1.45) {Ruído de medição};
+    \node[dot] (tz) at (11.0,0) {};
+    \node[io, align=center] (z) at (13.55,0) {Resposta medida\\$z$};
+    \draw[arr] (ent) -- (sys);
+    \draw[arr] (sys) -- node[lbl, above, pos=0.75] {$+$} (ns);
+    \draw[arr] (ru) -- node[lbl, right, pos=0.6] {$+$} (ns);
+    \draw[arr] (ns) -- (z);
+    % ------- modelo -------
+    \node[blk, minimum width=6.8cm, minimum height=2.15cm, bottom color=blue!12] (mod) at (4.85,-2.9) {};
+    \draw[semithick, black!70] ([yshift=0.38cm]mod.west) -- ([yshift=0.38cm]mod.east);
+    \node[font=\small\bfseries, text=blue!55!black] at ([yshift=0.72cm]mod.center) {Modelo Matemático};
+    \node[font=\small, align=center] at ([yshift=-0.36cm]mod.center)
+        {{\color{red!70!black}Integração das equações de estado}\\[1pt] Equações de observação};
+    \node[sum] (er) at (11.0,-2.9) {$\Sigma$};
+    \draw[arr] (d) |- node[lbl, below, pos=0.75] {} (mod.west);
+    \draw[arr] (mod.east) -- node[lbl, above, pos=0.5] {$y$} node[lbl, below, pos=0.88] {$-$} (er);
+    \draw[arr] (tz) -- node[lbl, right, pos=0.85] {$+$} (er);
+    \node[dot] (tz2) at (11.0,-1.35) {};
+    \draw[arr] (tz2) -- (0.95,-1.35) -- (0.95,-2.18) -- ([yshift=0.72cm]mod.west);
+    % ------- otimizacao -------
+    \node[blk, minimum width=6.8cm, minimum height=1.5cm, bottom color=orange!25] (opt) at (4.85,-5.6)
+        {Atualização dos parâmetros pela\\ otimização da função de verossimilhança};
+    \draw[arr] (er.south) |- node[lbl, right, pos=0.22, align=center] {Erro de resposta\\($z-y$)} ([yshift=-0.25cm]opt.east);
+    \draw[arr] ([yshift=-0.75cm]mod.east) -- (9.05,-3.65) -- node[lbl, left, pos=0.5] {Sensibilidades} (9.05,-5.35) -- ([yshift=0.25cm]opt.east);
+    \draw[arr] (opt.west) -- (0.5,-5.6) -- node[lbl, left, pos=0.5] {$\Theta_{j+1}$} (0.5,-3.65) -- ([yshift=-0.75cm]mod.west);
+    \end{tikzpicture}%
+    }
+    \caption{Ciclo iterativo do método do erro de saída \cite[Adaptado de][]{Jategaonkar2015}.}
     \label{fig:oem-loop}
 \end{figure}
 
@@ -326,7 +517,7 @@ e o conjunto de parâmetros com maior $R^2$ médio é tomado como resultado fina
 
 Na convergência, a inversa da matriz de informação de Fisher fornece a covariância das estimativas, $\mathrm{Cov}(\Theta) \approx \sigma^2 \big(S^\top W S\big)^{-1} = \sigma^2 F^{-1}$ (limite de Cramér--Rao), de onde se extrai o desvio-padrão relativo de cada parâmetro. Valores elevados sinalizam parâmetros pouco observáveis pelos dados.
 
-\subsection{Modelo não linear para identificação (Models)}
+\subsection{Modelo não linear para identificação (\textit{Models})}
 
 A etapa de modelos define a estrutura matemática que liga as entradas às saídas medidas, cujos parâmetros físicos serão estimados. Adota-se uma abordagem de caixa cinza: a estrutura é fixada pelas leis de corpo rígido deduzidas no Capítulo~2 (cinemática e equações de Newton--Euler), enquanto apenas os parâmetros físicos são estimados a partir dos dados de voo \cite{Aguirre2015}. Como as equações cinemáticas são bem estabelecidas, a confiabilidade da identificação depende sobretudo da adequação do modelo postulado \cite{Jategaonkar2015}.
 
@@ -365,7 +556,7 @@ As taxas compõem $g$ diretamente as acelerações que seguem o modelo de sensor
 
 O vetor a identificar é o $\Theta$ da Equação~\eqref{eq:theta}, reunindo as inércias, os coeficientes ${c_T}_i$ e ${c_M}_i$ de cada rotor e os arrastos $c_p,c_q,c_r$. O modelo pressupõe corpo rígido em modo quadrirrotor, com velocidade longitudinal desprezível, eliminando sustentação e arrastos da estrutura de asa fixa, e, operação em torno do voo pairado, condição em que o subsistema rotacional fica fracamente acoplado à translação. Conforme a análise de identificabilidade recomendada por \textcite{Jategaonkar2015}, os parâmetros pouco observáveis.
 
-\subsection{Critérios para validação no domínio do tempo (Validation)}
+\subsection{Critérios para validação no domínio do tempo (\textit{Validation})}
 
 A última etapa compara o modelo identificado com um segmento de validação, o qual possue movimento composto não utilizado durante a estimação, comparando a saída simulada $y$ com a medida $z$ em cada canal ($p,q,r,a_x,a_y,a_z$). Empregam-se quatro métricas complementares: Coeficiente de determinação ($R^2$) e coeficiente de Theil(TIC), a Decomposição de Theil ($U^b, U^v, U^c$), e o Limite de Cramér-Rao.
 
@@ -387,6 +578,6 @@ U^{c} = \frac{2(1-\rho)\,\sigma_z\,\sigma_y}{\mathrm{MSE}},
 \end{align}
 com $U^{b}+U^{v}+U^{c}=1$, sendo $\bar{z},\bar{y}$ as médias, $\sigma_z,\sigma_y$ os desvios-padrão e $\rho$ a correlação entre medida e simulação. 
 
-A parcela de \emph{viés} $U^{b}$ capta erro sistemático de offset; a de \emph{variância} $U^{v}$, discrepância de amplitude (amortecimento ou ganho mal capturados); e a de \emph{covariância} $U^{c}$, o erro não sistemático (aleatório). O ideal é $U^{b}\approx 0$, $U^{v}\approx 0$ e $U^{c}\approx 1$: o resíduo concentra-se na parcela aleatória, sem componente estrutural --- indício de que a dinâmica foi corretamente capturada e o que resta é ruído \cite{Jategaonkar2015}.
+A parcela de viés $U^{b}$ capta erro sistemático de offset; a de variância $U^{v}$, discrepância de amplitude (amortecimento ou ganho mal capturados); e a de covariância $U^{c}$, o erro não sistemático (aleatório). O ideal é $U^{b}\approx 0$, $U^{v}\approx 0$ e $U^{c}\approx 1$: o resíduo concentra-se na parcela aleatória, sem componente estrutural --- indício de que a dinâmica foi corretamente capturada e o que resta é ruído \cite{Jategaonkar2015}.
 
-\textbf{Limite de Cramér--Rao.} Diferentemente das anteriores, que avaliam o \emph{ajuste}, o limite de Cramér--Rao avalia a \emph{confiabilidade dos parâmetros}. Da inversa da matriz de informação de Fisher, introduzida na etapa de métodos, extrai-se o desvio-padrão relativo de cada parâmetro; seguindo \textcite{Tischler2012} e \textcite{Sato2021}, valores abaixo de $20\%$ caracterizam um parâmetro bem identificado, enquanto valores superiores apontam baixa observabilidade, tipicamente os parâmetros do canal de guinada.
+\textbf{Limite de Cramér--Rao.} Diferentemente das anteriores, que avaliam o ajuste, o limite de Cramér--Rao avalia a confiabilidade dos parâmetros. Da inversa da matriz de informação de Fisher, introduzida na etapa de métodos, extrai-se o desvio-padrão relativo de cada parâmetro; seguindo \textcite{Tischler2012} e \textcite{Sato2021}, valores abaixo de $20\%$ caracterizam um parâmetro bem identificado, enquanto valores superiores apontam baixa observabilidade, tipicamente os parâmetros do canal de guinada.

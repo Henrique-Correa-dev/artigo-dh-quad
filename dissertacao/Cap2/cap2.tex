@@ -1,4 +1,4 @@
-Este capítulo apresenta a elaboração teórica da dinâmica do drone híbrido em modo multirrotor. Sob a hipótese de corpo rígido, detalham-se as equações não lineares dos modelos rotacional e translacional, que descrevem o voo com seis graus de liberdade (6-DOF). Introduzem-se ainda a nomenclatura e os sistemas de coordenadas utilizados na formulação matemática, as equações cinemáticas de atitude e de posição e o modelo dos motores com a respectiva alocação de controle. A linearização desse modelo em torno do voo pairado, utilizada no projeto de controle, é apresentada no Apêndice~\ref{ap:linearizacao}.
+Este capítulo apresenta a elaboração teórica da dinâmica do drone híbrido em modo multirrotor. Sob a hipótese de corpo rígido, detalham-se as equações não lineares dos modelos rotacional e translacional, que descrevem o voo com seis graus de liberdade (6-DOF). Introduzem-se ainda a nomenclatura e os sistemas de coordenadas utilizados na formulação matemática, as equações cinemáticas de atitude e de posição e o modelo dos motores com a respectiva alocação de controle. Essas equações constituem a parte teórica da formulação de caixa cinza adotada no trabalho: elas fixam a estrutura do modelo, enquanto os seus parâmetros físicos são estimados a partir de dados reais de voo nos capítulos seguintes. A linearização desse modelo em torno do voo pairado, utilizada no projeto de controle, é apresentada no Apêndice~\ref{ap:linearizacao}.
 
 
 \section{Sistemas de Coordenadas}
@@ -143,14 +143,30 @@ Segundo \textcite{Quan2017}, destacado na Figura \ref{motor-model}, o sistema do
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=0.4\textwidth]{Cap2/1.png}
+  \begin{tikzpicture}[
+      blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.0cm, minimum width=4.2cm, align=center, font=\small},
+      arr/.style={-{Stealth[length=2.2mm]}, semithick},
+      lbl/.style={font=\footnotesize, anchor=west, inner sep=2pt},
+      grp/.style={rectangle, draw=black!50, dashed, rounded corners=4pt, inner sep=8pt}
+  ]
+  \node[blk] (prop) at (0,0)   {Modelo de Propulsão};
+  \node[blk] (efic) at (0,2.1) {Modelo de Eficácia\\de Controle};
+  \node[blk] (din)  at (0,4.7) {Modelo Dinâmico\\do Corpo Rígido};
+  \node[blk] (cin)  at (0,6.8) {Modelo Cinemático\\do Corpo Rígido};
+  \node[grp, fit={(-2.6,5.7) (din) (cin) (6.6,5.7)}] {};
+  \draw[arr] (0,-1.7) -- node[lbl] {Comandos de Entrada ($\sigma_i$)} (prop);
+  \draw[arr] (prop) -- node[lbl] {Velocidade Angular das Hélices ($\Omega_i$)} (efic);
+  \draw[arr] (efic) -- node[lbl] {Empuxos e Momentos ($T$, $\boldsymbol{\tau}^{b}$)} (din);
+  \draw[arr] (din)  -- node[lbl] {Velocidades Lineares e Angulares ($\mathbf{v}^{b}$, $\boldsymbol{\omega}^{b}$)} (cin);
+  \draw[arr] (cin)  -- node[lbl] {Atitude e Posição ($\Theta$, $\mathbf{p}^{g}$)} (0,8.5);
+  \end{tikzpicture}
   \caption{Submodelos do modo multirrotor (Adaptado de QUAN, 2017).}
   \label{motor-model}
 \end{figure}
 
 \subsection{Modelo de Propulsão do Motor}
 
-A dinâmica do conjunto motor--ESC, também chamado de modelo de propulsão, que relaciona o comando de PWM $\sigma_i \in [0,1]$ à velocidade $\Omega_i$ com $i$ sendo a numeração dos motores, é bem aproximada por um sistema de primeira ordem \cite{Quan2017}. O comando de entrada impõe um valor de velocidade angular estacionário $\Omega_{ss,i}$, aplicado em um sistema de primeira ordem com constante de tempo $\tau_m$, resultando na relação entre o sinal de entrada e a velocidade angular do motor instantânea $\Omega_i$, dada por:
+A dinâmica do conjunto motor--ESC, também chamado de modelo de propulsão, que relaciona o comando de PWM $\sigma_i \in [0,1]$ à velocidade $\Omega_i$ com $i$ sendo a numeração dos motores, é bem aproximada por um sistema de primeira ordem \cite{Quan2017}. {\color{blue}Nessa cadeia, o ESC recebe o comando $\sigma_i$ e a tensão da bateria $U_b$ e aplica ao motor a tensão média equivalente $U_m = \sigma_i\,U_b$, de modo que a constante de proporção do motor absorve a tensão de alimentação \cite{Quan2017}.} O comando de entrada impõe um valor de velocidade angular estacionário $\Omega_{ss,i}$, aplicado em um sistema de primeira ordem com constante de tempo $\tau_m$, resultando na relação entre o sinal de entrada e a velocidade angular do motor instantânea $\Omega_i$, dada por:
 \begin{equation}
   \Omega_{ss,i}= C_R \sigma_i + \Omega_b
   \label{eq:motor-input}
@@ -174,11 +190,40 @@ Cada um dos quatro motores \textit{brushless} rotaciona uma hélice que, ao gira
 \end{equation}
 em que ${c_T}_i$ e ${c_M}_i$ são os coeficientes de empuxo e de torque de cada motor, dependentes da geometria da hélice e da densidade do ar, obtidos experimentalmente em ensaios de bancada, conforme descrito no Apêndice~\ref{ap:bancada}.
 
-Cabe ressaltar que os modelos das Equações \eqref{eq:motor-input} a \eqref{eq:motor-torque} estão ancorados na premissa de que a bateria se comporta como uma fonte de tensão ideal. Assume-se que a tensão de alimentação não sofre influências ambientais, como temperatura e pressão, nem varia com o estado de carga (\textit{State of Charge}, SOC) ou com o envelhecimento da sua química. Na prática, a queda de tensão ao longo do voo reduz a velocidade estacionária alcançada para um mesmo comando, efeito que se refletiria diretamente na constante $C_R$ da Equação \eqref{eq:motor-input}. Os parâmetros levantados neste trabalho representam, portanto, valores válidos para a condição de carga dos ensaios realizados.
+Cabe ressaltar que os modelos das Equações \eqref{eq:motor-input} a \eqref{eq:motor-torque} estão ancorados na premissa de que a bateria se comporta como uma fonte de tensão ideal{\color{blue}, com tensão de saída $U_b$ constante, como indicado na Figura~\ref{motor}}. Assume-se que a tensão de alimentação não sofre influências ambientais, como temperatura e pressão, nem varia com o estado de carga (\textit{State of Charge}, SOC) ou com o envelhecimento da sua química. Na prática, a queda de tensão ao longo do voo reduz a velocidade estacionária alcançada para um mesmo comando, efeito que se refletiria diretamente na constante $C_R$ da Equação \eqref{eq:motor-input}. Os parâmetros levantados neste trabalho representam, portanto, valores válidos para a condição de carga dos ensaios realizados.
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=0.9\textwidth]{Cap2/2.png}
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[
+      blk/.style={rectangle, draw=black!70, semithick, rounded corners=2pt, top color=white, bottom color=black!12, minimum height=1.0cm, minimum width=1.9cm, align=center, font=\small},
+      arr/.style={-{Stealth[length=2.2mm]}, semithick},
+      io/.style={font=\small},
+      lbl/.style={font=\footnotesize, inner sep=2pt},
+      dot/.style={circle, fill, inner sep=0pt, minimum size=3.2pt},
+      grp/.style={rectangle, draw=black!50, dashed, rounded corners=4pt, inner sep=8pt}
+  ]
+  \node[blk] (bat) at (0,1.1)  {Bateria};
+  \node[blk] (cmd) at (0,-1.1) {Comando};
+  \node[blk, minimum height=3.2cm, minimum width=1.4cm] (esc) at (3.3,0) {ESC};
+  \node[rectangle, draw=black!70, semithick, rounded corners=4pt, fill=blue!7, inner sep=0pt, fit={(5.5,-1.6) (14.35,1.6)}] {};
+  \node[font=\small\bfseries, text=black!75] at (9.9,1.2) {Motor--Hélice};
+  \node[blk, minimum height=1.3cm] (eq1) at (7.6,0)  {$\Omega_{ss,i} = C_R\,\sigma_i + \Omega_b$};
+  \node[blk, minimum height=1.3cm] (eq2) at (12.2,0) {$\Omega_i = \dfrac{1}{\tau_m s + 1}\,\Omega_{ss,i}$};
+  \node[dot] (sp) at (15.1,0) {};
+  \node[blk, minimum width=3.0cm] (emp) at (17.8,1.1)  {Empuxo};
+  \node[blk, minimum width=3.0cm] (ctq) at (17.8,-1.1) {Contra-torque};
+  \draw[arr] (bat.east) -- node[lbl, above, pos=0.5] {$U_b$} (esc.west |- bat);
+  \draw[arr] (cmd.east) -- node[lbl, above, pos=0.5] {$\sigma_i$} (esc.west |- cmd);
+  \draw[arr] (esc) -- (eq1);
+  \draw[arr] (eq1) -- node[lbl, above] {$\Omega_{ss,i}$} (eq2);
+  \draw[] (eq2.east) -- node[lbl, above, pos=0.75] {$\Omega_i$} (sp);
+  \draw[arr] (sp) |- node[lbl, above, pos=0.78] {$c_T\,\Omega_i^{2}$} (emp.west);
+  \draw[arr] (sp) |- node[lbl, below=3pt, pos=0.78] {$c_M\,\Omega_i^{2}$} (ctq.west);
+  \draw[arr] (emp.east) -- node[io, right, pos=1.0] {$T_i$} ++(0.9,0);
+  \draw[arr] (ctq.east) -- node[io, right, pos=1.0] {$Q_i$} ++(0.9,0);
+  \end{tikzpicture}%
+  }
   \caption{Modelo de motor brushless (Adaptado de QUAN, 2017).}
   \label{motor}
 \end{figure}
@@ -263,6 +308,78 @@ o que permite expressar o momento de guinada diretamente em função dos empuxos
 
 Para o quadrirrotor, a matriz $\mathbf{B}$ é quadrada e inversível, o que permite resolver o problema de alocação de controle: dado o esforço desejado $\mathbf{u} = [\,T\ \ \tau_x\ \ \tau_y\ \ \tau_z\,]^{\mathsf{T}}$, os empuxos que cada rotor deve produzir são obtidos por $[\,T_1\ \ T_2\ \ T_3\ \ T_4\,]^{\mathsf{T}} = \mathbf{B}^{-1}\,\mathbf{u}$ e, por meio do modelo do motor da Equação~\eqref{eq:motor-thrust}, \eqref{eq:motor-torque} e \eqref{eq:motor-input}, obtém-se as respectivas velocidades $\Omega_i$ e os comandos $\sigma_i$.
 
+{\color{blue}
+\subsection[{\color{blue}Composição das Forças e Momentos}]{Composição das Forças e Momentos}
+
+Antes de desenvolver as equações de movimento, é conveniente enumerar as forças e os momentos que atuam sobre o drone híbrido em modo multirrotor, seguindo a decomposição adotada por \textcite{Graesdal2021} para aeronaves VTOL. A força total aplicada ao corpo é composta por três parcelas:
+
+\begin{equation}
+  \mathbf{f}^b = \mathbf{F}_g + \mathbf{F}_{rot} + \mathbf{F}_A,
+  \label{eq:soma-forcas}
+\end{equation}
+em que $\mathbf{F}_g$ é a força gravitacional projetada no referencial do corpo, $\mathbf{F}_{rot} = [\,0\ \ 0\ \ {-T}\,]^{\mathsf{T}}$ é o empuxo total dos quatro rotores ao longo do eixo $k^b$, obtido do modelo de propulsão da Seção anterior, e $\mathbf{F}_A$ reúne as forças aerodinâmicas geradas pela estrutura de asa fixa, desenvolvidas na próxima subseção. De forma análoga, o momento total é composto por três parcelas:
+
+\begin{equation}
+  \boldsymbol{\tau}^b = \boldsymbol{\tau}_{rot} + \boldsymbol{\tau}_{amort} + \boldsymbol{\tau}_A,
+  \label{eq:soma-momentos}
+\end{equation}
+em que $\boldsymbol{\tau}_{rot} = [\,\tau_x\ \ \tau_y\ \ \tau_z\,]^{\mathsf{T}}$ agrupa os momentos de controle produzidos pelos rotores, tanto pelo desbalanço de empuxo entre braços quanto pelos torques de reação das hélices, conforme a alocação da Equação~\eqref{eq:alocacao}. A parcela $\boldsymbol{\tau}_{amort} = [\,{-L_p\,p}\ \ {-M_q\,q}\ \ {-N_r\,r}\,]^{\mathsf{T}}$ representa o amortecimento angular produzido pelos próprios rotores. O mecanismo físico dominante dessa parcela é a variação do influxo com o movimento do corpo, pois quando a aeronave gira com taxa $p$, cada rotor desloca-se verticalmente com velocidade proporcional ao braço, o que altera seu empuxo no sentido de se opor ao giro \cite{Quan2017, Nguyen2025}. Por fim, $\boldsymbol{\tau}_A$ reúne os momentos aerodinâmicos da estrutura de asa fixa. Como em modo multirrotor as superfícies de comando permanecem travadas na posição neutra, não há momentos de controle aerodinâmico, e as parcelas $\mathbf{F}_A$ e $\boldsymbol{\tau}_A$ contêm apenas os termos de estabilidade estática e de amortecimento da estrutura.
+}
+
+{\color{blue}
+\subsection[{\color{blue}Forças e Momentos Aerodinâmicos da Estrutura}]{Forças e Momentos Aerodinâmicos da Estrutura}
+\label{sec:aero-estrutura}
+
+Diferentemente de um quadrirrotor convencional, o drone híbrido conserva asa, fuselagem e empenagem durante o voo em modo multirrotor, e essas superfícies geram forças e momentos aerodinâmicos sempre que há velocidade relativa ao ar. Esta subseção desenvolve essas parcelas a partir do modelo clássico de coeficientes de \textcite{Beard2012}, com atenção às convenções adotadas, e as reescreve em uma forma regular na velocidade, válida continuamente do voo pairado ao voo à frente.
+
+O modelo linear de coeficientes expressa os momentos aerodinâmicos como funções dos ângulos aerodinâmicos, das taxas angulares adimensionalizadas e das deflexões de comando. Retendo os termos de estabilidade e o termo de arqueamento $C_{m_0}$, e descartando os de comando, uma vez que as superfícies estão no neutro, os momentos são \cite[Eqs. 4.5, 4.15 e 4.16]{Beard2012}:
+
+\begin{align}
+  \tau_{A,x} &= \tfrac{1}{2}\rho V_a^2 S b \left[ C_{\ell_\beta}\beta + C_{\ell_p}\tfrac{b}{2V_a}\,p + C_{\ell_r}\tfrac{b}{2V_a}\,r \right],
+  \label{eq:aero-coef-l} \\
+  \tau_{A,y} &= \tfrac{1}{2}\rho V_a^2 S \bar{c} \left[ C_{m_0} + C_{m_\alpha}\alpha + C_{m_q}\tfrac{\bar{c}}{2V_a}\,q \right],
+  \label{eq:aero-coef-m} \\
+  \tau_{A,z} &= \tfrac{1}{2}\rho V_a^2 S b \left[ C_{n_\beta}\beta + C_{n_p}\tfrac{b}{2V_a}\,p + C_{n_r}\tfrac{b}{2V_a}\,r \right],
+  \label{eq:aero-coef-n}
+\end{align}
+em que $S$ é a área de referência da asa, $b$ a envergadura, $\bar{c}$ a corda média aerodinâmica e $V_a$ o módulo da velocidade aerodinâmica. Os termos de trim $C_{\ell_0}$ e $C_{n_0}$ são omitidos por serem nulos em aeronaves simétricas em relação ao plano longitudinal \cite{Beard2012}. O termo $C_{m_0}$, que decorre do arqueamento do perfil e não se anula por simetria, é mantido no modelo. Por não envolver razão adimensional, o momento associado conserva a dependência quadrática em $V_a$ e torna-se naturalmente desprezível nas baixas velocidades do voo em modo multirrotor, mas a sua presença preserva a equivalência estrutural com os modelos executáveis de asa fixa da aeronave, que o incluem. As derivadas cruzadas $C_{\ell_r}$ e $C_{n_p}$, que acoplam o momento de rolagem à taxa de guinada e o de guinada à taxa de rolagem, são mantidas com os valores medidos na mesma campanha de voo, preservando a estrutura completa dos modelos executáveis da aeronave. Cabe registrar a convenção adotada para a adimensionalização das taxas, o fator $b/(2V_a)$ com a velocidade instantânea, que é a convenção de \textcite{Beard2012} e também a dos programas de análise aerodinâmica AVL e XFLR5, o que permite empregar diretamente coeficientes dessas fontes. Outros trabalhos da mesma linhagem normalizam as taxas por uma velocidade de referência fixa \cite{Graesdal2021}, escolha inofensiva para voo em torno de uma condição de trim, mas inadequada para um modelo que deve atravessar velocidades da ordem de zero até o cruzeiro.
+
+Os ângulos aerodinâmicos são definidos a partir das componentes da velocidade no referencial do corpo \cite[Eqs. 2.6 e 2.7]{Beard2012}:
+
+\begin{equation}
+  \alpha = \tan^{-1}\!\left(\frac{w}{u}\right), \qquad
+  \beta  = \sin^{-1}\!\left(\frac{v}{V_a}\right).
+  \label{eq:alpha-beta}
+\end{equation}
+
+Da definição de $\beta$ decorre a identidade exata $\sin\beta = v/V_a$, e da geometria do triângulo de vento tem-se $w/V_a = \sin\alpha\cos\beta$. A substituição de $\beta$ por $v/V_a$ e de $\alpha$ por $w/V_a$ nas Equações~\eqref{eq:aero-coef-l} a~\eqref{eq:aero-coef-n} assume portanto ângulos aerodinâmicos pequenos, hipótese que o próprio modelo linear já pressupõe, uma vez que sua validade se restringe ao escoamento colado, abaixo do estol. Nessa condição o erro da substituição é de segunda ordem nos ângulos aerodinâmicos, permanecendo muito inferior à incerteza típica com que os próprios coeficientes são determinados. A formulação resultante recupera o modelo clássico de perturbação da identificação de sistemas, escrito diretamente nas componentes de velocidade do corpo \cite{Graesdal2021}, e coincide com a forma adotada por \textcite{Nguyen2025} para o voo pairado, regime no qual os ângulos aerodinâmicos são indefinidos e as componentes $u$, $v$ e $w$ constituem as variáveis naturais do problema.
+
+Efetuando a substituição, o fator $V_a^2$ externo cancela com o $1/V_a$ interno de cada razão adimensional, e os momentos resultam lineares na velocidade:
+
+\begin{align}
+  \tau_{A,x} &= \tfrac{1}{4}\rho S b^2\, C_{\ell_p} V_a\, p + \tfrac{1}{4}\rho S b^2\, C_{\ell_r} V_a\, r + \tfrac{1}{2}\rho S b\, C_{\ell_\beta} V_a\, v,
+  \label{eq:aero-reg-l} \\
+  \tau_{A,y} &= \tfrac{1}{4}\rho S \bar{c}^2\, C_{m_q} V_a\, q + \tfrac{1}{2}\rho S \bar{c}\, C_{m_\alpha} V_a\, w + \tfrac{1}{2}\rho S \bar{c}\, C_{m_0} V_a^2,
+  \label{eq:aero-reg-m} \\
+  \tau_{A,z} &= \tfrac{1}{4}\rho S b^2\, C_{n_r} V_a\, r + \tfrac{1}{4}\rho S b^2\, C_{n_p} V_a\, p + \tfrac{1}{2}\rho S b\, C_{n_\beta} V_a\, v.
+  \label{eq:aero-reg-n}
+\end{align}
+
+Essa forma, empregada por \textcite{Salahudden2023} justamente no contexto de aeronaves híbridas, é o que permite usar uma única equação em todo o envelope. A forma fechada das Equações~\eqref{eq:aero-coef-l} a~\eqref{eq:aero-coef-n} é singular em $V_a \to 0$, pois $\alpha$ e $\beta$ tornam-se indefinidos e o fator $1/V_a$ diverge, o que obriga modelos convencionais a desligar a aerodinâmica abaixo de um limiar de velocidade ou a interpolar entre dois modelos distintos \cite{Graesdal2021, Hu2024}. Na forma aberta os termos tendem a zero continuamente com a velocidade, sem chaveamento. Todos os coeficientes são negativos quando estabilizantes, com exceção de $C_{n_\beta}$, positivo para estabilidade direcional, e os termos são somados aos momentos, de modo que o sinal físico fica contido no próprio coeficiente \cite{Beard2012}.
+
+As forças aerodinâmicas seguem a mesma construção. A sustentação e o arrasto são definidos nos eixos de estabilidade e levados ao corpo pela rotação em $\alpha$, que em primeira ordem se reduz à identidade, resultando em:
+
+\begin{align}
+  F_{A,x} &= -\tfrac{1}{2}\rho S\, C_{D_0} V_a^2,
+  \label{eq:aero-reg-fx} \\
+  F_{A,y} &= \tfrac{1}{2}\rho S\, C_{Y_\beta} V_a\, v,
+  \label{eq:aero-reg-fy} \\
+  F_{A,z} &= -\tfrac{1}{2}\rho S \left( C_{L_0} V_a^2 + C_{L_\alpha} V_a\, w \right),
+  \label{eq:aero-reg-fz}
+\end{align}
+em que os termos em $V_a^2$ são os únicos que não envolvem razão adimensional e por isso conservam a dependência quadrática. Os coeficientes de estabilidade desta formulação são propriedades da aeronave, e podem ser obtidos por métodos de painéis ou por identificação em voo em regime de asa fixa, no qual são dominantes e bem observáveis. A obtenção dos valores empregados neste trabalho e a forma como esta parcela entra no processo de identificação são descritas nos Capítulos~3 e~5.
+}
+
 \subsection{Modelo Rotacional}
 
 A elaboração do modelo rotacional é detalhado por \textcite{Beard2012}, onde esta é derivada da segunda lei de newton que determina:
@@ -296,9 +413,34 @@ lembrando que $\boldsymbol{\dot{\omega_b}} = [\dot{p},\dot{q},\dot{r}]^T$, repre
   \label{eq:matrizinercia}
 \end{equation}
 
-Considerando a presença de um arrasto angular, representados pelos coeficientes de arrasto $c_p$, $c_q$ e $c_r$, proporcionais às velocidades angulares, conforme ilustrado por \textcite{Quan2017} na Figura \ref{arrasto1}, o escoamento incidente nas hélices gera uma força de arrasto que, atuando a uma distância do centro de gravidade, produz um torque de arrasto. Quando esse escoamento é induzido pela própria rotação do corpo, com cada rotor deslocando-se a uma velocidade proporcional à taxa angular e ao braço, o torque resultante opõe-se ao giro, dando origem aos termos de amortecimento adotados no modelo rotacional.
+{\color{blue}O amortecimento angular dos rotores, introduzido na Equação~\eqref{eq:soma-momentos} pela parcela $\boldsymbol{\tau}_{amort}$, tem origem no escoamento induzido pela própria rotação do corpo, conforme ilustrado por \textcite{Quan2017} na Figura \ref{arrasto1}. Quando a aeronave gira, cada rotor desloca-se com velocidade proporcional à taxa angular e ao braço, o que altera o influxo e o empuxo no sentido de se opor ao giro, efeito conhecido na literatura de rotores como amortecimento por influxo induzido (\textit{inflow damping}) \cite{Nguyen2025}. O efeito é representado pelos coeficientes $L_p$, $M_q$ e $N_r$, expressos em N$\cdot$m$\cdot$s, e formulá-lo como momento, e não como termo subtraído das derivadas dos estados, preserva a interpretação física e garante o processamento pela mesma matriz de inércia dos demais momentos. A parcela do influxo pode ser calculada diretamente da geometria e do ensaio de bancada. Quando o corpo gira com taxa $\omega$ em torno de um eixo, cada um dos quatro rotores desloca-se com velocidade $\ell\,\omega$ e a variação de força resultante, aplicada no mesmo braço, produz o momento:
 
-Além disso o torque gerados pelos motores $\boldsymbol{\tau^b}=[\tau_x, \tau_y, \tau_z]$ das Equação \eqref{eq:alocacao}, é possível formular o modelo rotacional substituindo a Equação \eqref{eq:second-law-rotation2} em \eqref{eq:second-law-rotation1}, obtém-se:
+\begin{equation}
+  \tau_{influxo} = -4\,k\,\ell^{2}\,\omega,
+  \label{eq:amort-priori}
+\end{equation}
+
+em que $k$ é a inclinação da força do rotor com a velocidade do cubo e $\ell$ é o braço em relação ao eixo de giro. Aplicando a relação aos três eixos, obtêm-se os coeficientes:
+
+\begin{align}
+  L_p &= 4\,k_v\,\ell_y^{2}, \label{eq:priori-lp} \\
+  M_q &= 4\,k_v\,\ell_x^{2}, \label{eq:priori-mq} \\
+  N_r &= 4\,k_h\,d^{2},     \label{eq:priori-nr}
+\end{align}
+
+em que $k_v$ é a inclinação do empuxo com a velocidade vertical do rotor, medida em bancada, $k_h$ é o análogo da força no plano do rotor, que se opõe ao deslocamento tangencial do cubo, $\ell_x$ e $\ell_y$ são os braços longitudinal e lateral dos rotores em relação ao CG e $d$ é a distância do CG a cada rotor. Em voo, os coeficientes identificados concentram também outros efeitos além do influxo, como o batimento das pás e a interação do fluxo induzido dos rotores com as superfícies da estrutura, que adiciona amortecimento já no voo pairado \cite{Reddinger2024}, e por isso são lidos como coeficientes efetivos de amortecimento \cite{Nguyen2025}.}
+
+{\color{blue}
+O momento total $\boldsymbol{\tau}^b$ é a soma das três parcelas da Equação~\eqref{eq:soma-momentos}, com os momentos de controle $[\tau_x, \tau_y, \tau_z]^{\mathsf{T}}$ da alocação da Equação~\eqref{eq:alocacao}, o amortecimento de rotor e os momentos aerodinâmicos da estrutura das Equações~\eqref{eq:aero-reg-l} a~\eqref{eq:aero-reg-n}. Agrupando as três parcelas por eixo, definem-se os momentos totais:
+
+\begin{align}
+  M_x &= \tau_x - L_p\,p + \tau_{A,x}, \label{eq:momento-total-x} \\
+  M_y &= \tau_y - M_q\,q + \tau_{A,y}, \label{eq:momento-total-y} \\
+  M_z &= \tau_z - N_r\,r + \tau_{A,z}. \label{eq:momento-total-z}
+\end{align}
+}
+
+Substituindo a Equação \eqref{eq:second-law-rotation2} em \eqref{eq:second-law-rotation1}, obtém-se:
 
 \begin{equation}
   \frac{d \mathbf{\boldsymbol{\omega_b}}}{dt} = \mathbf{J^{-1}}[-\boldsymbol{\omega_b} \times (\mathbf{J} \boldsymbol{\omega_b})+\boldsymbol{\tau^b}]
@@ -311,7 +453,7 @@ Além disso o torque gerados pelos motores $\boldsymbol{\tau^b}=[\tau_x, \tau_y,
   -\begin{bmatrix} 0 & -r & q \\ r & 0 & -p \\ -q & p & 0 \end{bmatrix}
   \begin{bmatrix} J_{xx} & 0 & -J_{xz} \\ 0 & J_{yy} & 0 \\ -J_{xz} & 0 & J_{zz} \end{bmatrix}
   \begin{bmatrix} p \\ q \\ r \end{bmatrix}
-  + \begin{bmatrix} \tau_x \\ \tau_y \\ \tau_z \end{bmatrix}
+  + {\color{blue}\begin{bmatrix} M_x \\ M_y \\ M_z \end{bmatrix}}
   \right]
   \label{eq:rot-matricial}
   \end{equation}
@@ -323,13 +465,17 @@ Além disso o torque gerados pelos motores $\boldsymbol{\tau^b}=[\tau_x, \tau_y,
   \label{arrasto1}
 \end{figure}
 
-A dinâmica rotacional do corpo rígido, assumindo que o VTOL está em modo quadrirrotor, com uma velocidade longitudinal desprezível, reduzindo, portanto, os momentos de arrasto aerodinâmicos da estrutura de asa-fixa, é descrita pelas equações: 
+Expandindo a Equação~\eqref{eq:rot-matricial}, a dinâmica rotacional do corpo rígido em modo quadrirrotor é descrita pelas equações:
 
+{\color{blue}
 \begin{align}
-  \dot{p} &= \Gamma_1\,pq - \Gamma_2\,qr + \Gamma_3\,\tau_x + \Gamma_4\,\tau_z - c_p p, \label{eq:p_dot} \\
-  \dot{q} &= \Gamma_5\,pr - \Gamma_6\,(p^2 - r^2) + \frac{1}{J_y}\,\tau_y - c_q q, \label{eq:q_dot} \\
-  \dot{r} &= \Gamma_7\,pq - \Gamma_1\,qr + \Gamma_4\,\tau_x + \Gamma_8\,\tau_z - c_r r. \label{eq:r_dot}
+  \dot{p} &= \Gamma_1\,pq - \Gamma_2\,qr + \Gamma_3\,M_x + \Gamma_4\,M_z, \label{eq:p_dot} \\
+  \dot{q} &= \Gamma_5\,pr - \Gamma_6\,(p^2 - r^2) + \frac{1}{J_y}\,M_y, \label{eq:q_dot} \\
+  \dot{r} &= \Gamma_7\,pq - \Gamma_1\,qr + \Gamma_4\,M_x + \Gamma_8\,M_z. \label{eq:r_dot}
 \end{align}
+}
+
+{\color{blue}Cabe observar que, pela presença do produto de inércia $J_{xz}$, os momentos $M_x$ e $M_z$ entram acoplados nas derivadas de $p$ e de $r$ por meio de $\Gamma_4$, de modo que o amortecimento de rolagem $L_p\,p$ contribui também para a guinada e o de guinada $N_r\,r$ contribui para a rolagem, acoplamento que se perderia se o amortecimento fosse subtraído diretamente das derivadas dos estados.}
 
 em que os coeficientes $\Gamma_i$ agrupam os termos de inércia, com $\Gamma = J_x J_z - J_{xz}^2$:
 \begin{equation}
@@ -360,31 +506,35 @@ onde $\mathbf{m}$ é a massa, $\mathbf{v}$ é a velocidade linear e $\mathbf{f}$
   m \frac{d \mathbf{v}}{dt} = m \left( \frac{d \mathbf{v^b}}{dt} + \boldsymbol{\omega_b} \times \mathbf{v^b} \right) = \mathbf{f^b},
   \label{eq:second-law-translational1}
 \end{equation}
-levando em consideração que $\dot{\mathbf{v}^b}=[\dot{u}, \dot{v}, \dot{w}]^T$, tem-se que a únicas forças aplicadas no mulitirrotor é o empuxo total gerado pelos motores $T$ no eixo $k^b$, e a força da gravidade transformada para o sistema de referecial do corpo, definido pela Equação \eqref{eq:g-corpo}, portanto:
+levando em consideração que $\dot{\mathbf{v}^b}=[\dot{u}, \dot{v}, \dot{w}]^T$, {\color{blue}as forças aplicadas são as três parcelas da Equação~\eqref{eq:soma-forcas}, o empuxo total $T$ gerado pelos motores no eixo $k^b$, a força da gravidade transformada para o referencial do corpo, definida pela Equação \eqref{eq:g-corpo}, e as forças aerodinâmicas da estrutura das Equações~\eqref{eq:aero-reg-fx} a~\eqref{eq:aero-reg-fz}}, portanto:
 
 \begin{equation}
-  \mathbf{f^b} = \begin{bmatrix} 0 \\ 0 \\ -T \end{bmatrix} + \begin{bmatrix} -\,g\,s_\theta \\ g\,s_\phi c_\theta \\ g\,c_\phi c_\theta \end{bmatrix}
+  \mathbf{f^b} = \begin{bmatrix} 0 \\ 0 \\ -T \end{bmatrix} + \begin{bmatrix} -\,g\,s_\theta \\ g\,s_\phi c_\theta \\ g\,c_\phi c_\theta \end{bmatrix} + {\color{blue}\begin{bmatrix} F_{A,x} \\ F_{A,y} \\ F_{A,z} \end{bmatrix}}
   \label{eq:second-law-translational2}
 \end{equation}
 
-Substituindo a equação \eqref{eq:second-law-rotation2} em\eqref{eq:second-law-rotation1}, obtem-se:
+Reescrevendo a Equação \eqref{eq:second-law-translational1} na forma matricial, obtém-se:
 
 \begin{equation}
   \begin{bmatrix} \dot{u} \\ \dot{v} \\ \dot{w} \end{bmatrix}
   = -\begin{bmatrix} 0 & -r & q \\ r & 0 & -p \\ -q & p & 0 \end{bmatrix}
   \begin{bmatrix} u \\ v \\ w \end{bmatrix}
-  + \frac{1}{m}\begin{bmatrix} 0 \\ 0 \\ -T \end{bmatrix}
+  + \frac{1}{m}{\color{blue}\begin{bmatrix} F_{A,x} \\ F_{A,y} \\ -T + F_{A,z} \end{bmatrix}}
   + \begin{bmatrix} -g\,s_\theta \\ g\,s_\phi c_\theta \\ g\,c_\phi c_\theta \end{bmatrix}
   \label{eq:trans-matricial}
   \end{equation}
 
-Utilizando a Equação \eqref{eq:second-law-translational1}, assumindo que a velocidade longitudinal é desprezível, retirando a sustentação e arrastos decorrentes da estrutura de asa fixa, é possível obter as equações que regem o modelo translacional do drone híbrido:
+Utilizando a Equação \eqref{eq:second-law-translational1}, obtêm-se as equações que regem o modelo translacional do drone híbrido:
 
+{\color{blue}
 \begin{align}
-  \dot{u} &= rv - qw - g\,s_\theta, \label{eq:u_dot} \\
-  \dot{v} &= pw - ru + g\,s_\phi c_\theta, \label{eq:v_dot} \\
-  \dot{w} &= qu - pv - \frac{T}{m} + g\,c_\phi c_\theta. \label{eq:w_dot}
+  \dot{u} &= rv - qw - g\,s_\theta + \frac{F_{A,x}}{m}, \label{eq:u_dot} \\
+  \dot{v} &= pw - ru + g\,s_\phi c_\theta + \frac{F_{A,y}}{m}, \label{eq:v_dot} \\
+  \dot{w} &= qu - pv + g\,c_\phi c_\theta + \frac{F_{A,z}}{m} - \frac{T}{m}. \label{eq:w_dot}
 \end{align}
+}
+
+{\color{blue}No voo pairado estrito as parcelas aerodinâmicas se anulam com a velocidade e as equações recuperam a forma clássica do quadrirrotor. À medida que a velocidade cresce, os termos da estrutura entram de forma contínua, sem chaveamento de modelo, que é a propriedade buscada com a forma regular da Seção~\ref{sec:aero-estrutura}.}
 
 \subsection{Compensações e correções nas leituras de acelerômetros}
 

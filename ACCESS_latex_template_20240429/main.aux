@@ -1,0 +1,133 @@
+\relax 
+\citation{beard2005autonomous,marshall2016introduction}
+\citation{garcia2010multi,valavanis2015future}
+\citation{saeed2018survey,ducard2021review}
+\citation{ducard2021review}
+\citation{levin2019real,chao2010autopilots}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
+\newlabel{sec:introduction}{{I}{1}{}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-A}}Importance of the Topic}{1}{}\protected@file@percent }
+\citation{meier2015px4,px4dev2025}
+\citation{stevens2016aircraft}
+\citation{nelson1998flight}
+\citation{beard2012small,cetin2012continuous,du2011development}
+\citation{santos2018projeto}
+\citation{bittar2012arquitetura}
+\citation{martins2025piper}
+\citation{saeed2018survey,theys2016influence}
+\citation{ducard2021review}
+\citation{filho2019aerodynamic,bristeau2009role}
+\citation{martins2025piper}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Custom hybrid VTOL drone developed by the Neusa research group at the Aeronautics Institute of Technology (ITA), used as the target platform for the fixed-wing autopilot designed in this work.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone}{{1}{2}{}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-B}}What is Known (State of the Art)}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-C}}What is Unknown (Research Gap)}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-D}}Research Objective}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-E}}Approach Overview}{2}{}\protected@file@percent }
+\citation{martins2025piper}
+\citation{stevens2016aircraft,nelson1998flight}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-F}}Main Contributions}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}Materials and Methods}{3}{}\protected@file@percent }
+\newlabel{sec:methods}{{II}{3}{}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Target Aircraft and Aerodynamic Model}{3}{}\protected@file@percent }
+\newlabel{eq:state}{{1}{3}{}{equation.1}{}}
+\newlabel{eq:inputs}{{2}{3}{}{equation.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}6-DOF Nonlinear Plant in MATLAB/Simulink}{3}{}\protected@file@percent }
+\newlabel{eq:force}{{3}{3}{}{equation.3}{}}
+\newlabel{eq:moment}{{4}{3}{}{equation.4}{}}
+\citation{nelson1998flight}
+\citation{stevens2016aircraft}
+\citation{santos2018projeto}
+\citation{santos2018projeto}
+\citation{santos2018projeto}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Trim Condition and Linearization}{4}{}\protected@file@percent }
+\newlabel{sec:trim}{{\mbox  {II-C}}{4}{}{subsection.2.3}{}}
+\newlabel{eq:trim}{{5}{4}{}{equation.5}{}}
+\newlabel{eq:trim-cost}{{6}{4}{}{equation.6}{}}
+\newlabel{eq:linear}{{7}{4}{}{equation.7}{}}
+\newlabel{eq:longstate}{{8}{4}{}{equation.8}{}}
+\newlabel{eq:latstate}{{9}{4}{}{equation.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Longitudinal Control Loops}{4}{}\protected@file@percent }
+\newlabel{sec:longctrl}{{\mbox  {II-D}}{4}{}{subsection.2.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Pitch attitude autopilot with stability augmentation system (SAS), adapted from Santos \cite  {santos2018projeto}.}}{4}{}\protected@file@percent }
+\newlabel{fig:pitch}{{2}{4}{}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Velocity autopilot: a PID throttle loop runs in parallel with the pitch attitude loop, attenuating the speed loss caused by climb maneuvers.}}{4}{}\protected@file@percent }
+\newlabel{fig:velocity}{{3}{4}{}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Altitude hold autopilot: an outer PID generates the pitch reference $\theta _\text  {ref}$ tracked by the inner pitch attitude loop.}}{5}{}\protected@file@percent }
+\newlabel{fig:altitude}{{4}{5}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-E}}Lateral-Directional Control Loops}{5}{}\protected@file@percent }
+\newlabel{eq:cordturn}{{10}{5}{}{equation.10}{}}
+\newlabel{eq:washout}{{11}{5}{}{equation.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-F}}Simulation and Validation Framework}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Results}{5}{}\protected@file@percent }
+\newlabel{sec:results}{{III}{5}{}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Simulation Setup and Evaluation Criteria}{5}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Closed-loop step-tracking test scenarios.}}{5}{}\protected@file@percent }
+\newlabel{tab:scenarios}{{1}{5}{}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Scenario 1: Altitude Hold ($+50$~m Step)}{5}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Bank angle hold autopilot with roll SAS and heading-select feed-forward (PIPER-1-6 Simulink model).}}{6}{}\protected@file@percent }
+\newlabel{fig:bank}{{5}{6}{}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Yaw damper with washout filter on yaw rate $r$, used to damp dutch-roll oscillations without opposing steady-state coordinated turns.}}{6}{}\protected@file@percent }
+\newlabel{fig:yawdamper}{{6}{6}{}{figure.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Scenario 1 --- altitude $h(t)$ tracking the $+50$~m step (solid) against the reference (dashed).}}{6}{}\protected@file@percent }
+\newlabel{fig:s1_alt}{{7}{6}{}{figure.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Scenario 1 --- elevator deflection (deg), peaking at $4.5^\circ $.}}{6}{}\protected@file@percent }
+\newlabel{fig:s1_act}{{8}{6}{}{figure.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Scenario 2: Velocity Hold ($+6$~m/s Step)}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Scenario 2 --- airspeed $V_T(t)$ tracking the $+6$~m/s step.}}{6}{}\protected@file@percent }
+\newlabel{fig:s2_vel}{{9}{6}{}{figure.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Scenario 2 --- throttle command ($0$--$1$), peaking at $0.76$.}}{6}{}\protected@file@percent }
+\newlabel{fig:s2_thr}{{10}{6}{}{figure.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Scenario 3: Heading Hold ($+20^\circ $ Step)}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Scenario 3 --- heading $\psi (t)$ tracking the $+20^\circ $ step.}}{7}{}\protected@file@percent }
+\newlabel{fig:s3_hdg}{{11}{7}{}{figure.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Scenario 3 --- aileron deflection (deg), peaking at $1.5^\circ $.}}{7}{}\protected@file@percent }
+\newlabel{fig:s3_ail}{{12}{7}{}{figure.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Scenario 4: Combined Maneuver ($+30$~m \& $+15^\circ $)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-F}}Consolidated Performance Summary}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Discussion}{7}{}\protected@file@percent }
+\newlabel{sec:discussion}{{IV}{7}{}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Summary of Main Findings}{7}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Scenario 4 --- altitude $h(t)$ for the simultaneous $+30$~m command.}}{7}{}\protected@file@percent }
+\newlabel{fig:s4_alt}{{13}{7}{}{figure.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Scenario 4 --- heading $\psi (t)$ for the simultaneous $+15^\circ $ command.}}{7}{}\protected@file@percent }
+\newlabel{fig:s4_hdg}{{14}{7}{}{figure.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Nonlinear Validation Insight}{7}{}\protected@file@percent }
+\citation{santos2018projeto}
+\citation{martins2025piper}
+\citation{saeed2018survey,theys2016influence}
+\citation{meier2015px4,px4dev2025}
+\citation{stevens2016aircraft}
+\citation{bittar2012arquitetura}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Consolidated step-response metrics for every closed-loop test on the nonlinear plant, with the corresponding peak actuator demand.}}{8}{}\protected@file@percent }
+\newlabel{tab:summary}{{2}{8}{}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Comparison with Prior Work}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Limitations of the Study}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Future Directions}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{8}{}\protected@file@percent }
+\newlabel{sec:conclusion}{{V}{8}{}{section.5}{}}
+\bibstyle{IEEEtran}
+\bibdata{IEEEexample}
+\bibcite{beard2005autonomous}{1}
+\bibcite{marshall2016introduction}{2}
+\bibcite{garcia2010multi}{3}
+\bibcite{valavanis2015future}{4}
+\bibcite{saeed2018survey}{5}
+\bibcite{ducard2021review}{6}
+\bibcite{levin2019real}{7}
+\bibcite{chao2010autopilots}{8}
+\bibcite{meier2015px4}{9}
+\bibcite{px4dev2025}{10}
+\bibcite{stevens2016aircraft}{11}
+\bibcite{nelson1998flight}{12}
+\bibcite{beard2012small}{13}
+\bibcite{cetin2012continuous}{14}
+\bibcite{du2011development}{15}
+\bibcite{santos2018projeto}{16}
+\bibcite{bittar2012arquitetura}{17}
+\bibcite{martins2025piper}{18}
+\bibcite{theys2016influence}{19}
+\bibcite{filho2019aerodynamic}{20}
+\bibcite{bristeau2009role}{21}
+\@writefile{toc}{\contentsline {section}{REFERENCES}{9}{}\protected@file@percent }
+\gdef \@abspage@last{9}

@@ -1,0 +1,76 @@
+===========================================================================
+TUTORIAL ---- AVL
+	
+	Obtendo os coeficientes aerodinâmicos de estabilidade da aeronave 
+
+===========================================================================
+
+1. Após a modelagem da aeronave no XFLR5 (dimensões e distribuição de massas) e a verificação que a aeronave é estável, deve-se exportar o arquivo de momentos de inércia e massas para uso com o AVL.
+
+2. Antes de executar o AVL deve-se ter o arquivo de modelagem (desenho) da aeronave no padrão do AVL.
+
+3. Já com o arquivo de desenho da aeronave para o AVL e o arquivo de massas exportado com o XFLR5, inicia-se a execução da simulação pela execução do software AVL.exe
+
+4. Com o software aberto, executa-se o comando:
+	> load Piper_J3_Cub.avl
+
+5. Em seguida:
+	> mass Piper_J3_Cub.mass
+
+6. Será apresentado a distribuição de massas e momentos de inércias. Deve-se então aceitar ou abortar. Para aceitar usa-se o seguinte comando:
+	> mset
+	> 0
+
+7. O proximo passo é definir os parâmetros da simulação e salvar um 'run case'. Para isso, deve-se ir para o menu de operações usando o comando:
+	> oper
+
+8. Para o objetivo de gerar os coeficientes aerodinâmicos é importante ter:
+- velocidade de trimagem
+- ângulo alpha que estabiliza o voo para esta velocidade (opcional)
+
+9. No menu de operações há diversas opções. Para setar a velocidade usamos a opção:
+	> m ---- para o selecionar o submenu
+	> v ---- para selecionar a variavel velocidade
+	> digitar o valor da velocidade
+	> enter para voltar ao menu principal
+
+10. Depois de setar a velocidade, usa-se a opção 'C1' para setar restrições de um voo reto e nivelado e obtermos o coeficiente CL. Então:
+	> c1
+	> enter para voltar ao menu principal
+
+11. Para setar o angulo alpha usamos a opção:
+	> a ---- para selecionar o submenu
+	> a ---- para selecionar a variavel alpha
+	> digitar o valor de alpha (opcional)
+	> enter para voltar ao menu principal
+
+12. Para o nosso objetivo final, é importante obter no final o valor da deflexão de profundor para o ponto de trimagem. Para que isso ocorra devemos fazer uma alteração na variável D2 referente ao elevator. As variáveis D1 aileron e D3 rudder são opcionais. Assim:
+	> d2 ---- para selecionar o submenu
+	> pm ---- para selecionar a restrição 'Cm pitchmom' para o elevator
+	> digitar o valor ou deixar sem preencher
+	> enter para voltar ao menu principal
+
+	> d1 ---- para selecionar o submenu
+	> rm ---- para selecionar a restrição 'Cl roll mom' para o aileron
+	> digitar o valor ou deixar sem preencher
+	> enter para voltar ao menu principal
+	> d3 ---- para selecionar o submenu
+	> ym ---- para selecionar a restrição 'Cn yaw mom' para o rudder
+	> digitar o valor ou deixar sem preencher
+	> enter para voltar ao menu principal
+
+13. Já com os parâmetros de velocidade e alpha setados, é importante salvar a configuração atual por meio de um 'run case'. Para isso selecionamos a opção:
+	> s ---- para salvar o arquivo 'run case'
+	> digitar o nome do arquivo com a extensão .run
+
+14. Também é possível setar e fazer as alterações de valores no arquivos 'run case' abrindo estes com um editor de texto. Caso seja o caso, após fazer manualmente a alteração do arquivo fechamos o programa e repetimos os passos 3 à 7. Em seguida, no menu de operações, carregamos o 'run case' salvo usando a opção:
+ 	> f ---- carregar o 'run case'
+
+15. Agora, podemos executar o 'run case' usando a opção:
+ 	> x ---- para executar
+
+16. Por fim, para gerar as derivadas de estabilidade, usamos a opção:
+	> st
+	> digitar o nome do arquivo
+
+17. Feito isso teremos no arquivo gerado todos os parâmetros setados para a simulação e os coeficientes aerodinâmicos da aeronave.

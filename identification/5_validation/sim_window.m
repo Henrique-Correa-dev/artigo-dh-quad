@@ -21,7 +21,7 @@ function res = sim_window(mode, P, time, pwm, pqr_meas, att_meas, constants)
 %   pwm       [Nx4] PWMs dos 4 motores (µs)
 %   pqr_meas  [Nx3] gyro medido [rad/s]
 %   att_meas  [Nx3] atitude medida do EKF [graus]
-%   constants struct: .m .g .tau_motor
+%   constants struct: .m .g
 %
 % SAÍDA (struct res):
 %   .p, .q, .r          [Nx1] velocidades angulares simuladas
@@ -37,8 +37,13 @@ function res = sim_window(mode, P, time, pwm, pqr_meas, att_meas, constants)
     g  = constants.g;
     m  = constants.m;
 
-    % Modelo de motor
-    [func_T, func_Q] = motor_models();
+    % ---- CADEIA DE ATUAÇÃO ÚNICA (2_model/motor_chain.m) ----
+    % pwm (μs) → atraso puro + RPM_ss + lag τ_m (solução exata) → RPM.
+    % A partir daqui `pwm` contém RPM e func_T/func_Q agem sobre RPM
+    % (T = kT_rpm·RPM²). Mesma cadeia do identify_plant → R² comparável.
+    % ATENÇÃO: o chamador NÃO deve mais aplicar DELAY_PWM (está aqui dentro).
+    [pwm, func_T, func_Q, mc_info] = motor_chain(time, pwm);
+    res.rpm = pwm;  res.motor_info = mc_info;
 
     % Parâmetros do P
     k_T = P(5:8);
@@ -54,6 +59,11 @@ function res = sim_window(mode, P, time, pwm, pqr_meas, att_meas, constants)
     dyn_h = vtol_dynamics('get_handles');
     moments_fn   = dyn_h.moments;
     trans_dot_fn = dyn_h.trans_dot;
+
+    % (legado) o modelo de motor com RPM como estado (vtol_dynamics_motor, 13
+    % estados) foi substituído pela cadeia motor_chain + 9 estados, que é
+    % matematicamente equivalente e idêntica à da identificação.
+    USE_MOTOR = false;
 
     %% T_ref, Q_ref e momentos (vetorizado sobre toda a janela)
     T_ref = zeros(N,4);  Q_ref = zeros(N,4);
@@ -73,11 +83,19 @@ function res = sim_window(mode, P, time, pwm, pqr_meas, att_meas, constants)
     %% ============= ROTACIONAL =============
     switch lower(mode)
         case 'full'
-            % Integra p,q,r,φ,θ,ψ,u,v,w via vtol_dynamics (9 estados)
+            % Integra p,q,r,φ,θ,ψ,u,v,w. Se motor.enable → vtol_dynamics_motor
+            % (13 estados, RPM como estado: modelo de motor físico PWM→RPM→empuxo).
             att_rad0 = deg2rad(att_meas(1,:));
-            y0 = [pqr_meas(1,:)'; att_rad0(:); 0; 0; 0];
             ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);
-            ode_func = @(t,y) vtol_dynamics(t, y, P, time, pwm, func_T, func_Q, constants);
+            if USE_MOTOR
+                pwm0 = pwm(1,:);
+                w0 = max(0, proj_p_sw.motor.CR*pwm0 + proj_p_sw.motor.Omega_b);  % RPM IC = regime no PWM inicial
+                y0 = [pqr_meas(1,:)'; att_rad0(:); 0;0;0; w0(:)];
+                ode_func = @(t,y) vtol_dynamics_motor(t, y, P, time, pwm, constants);
+            else
+                y0 = [pqr_meas(1,:)'; att_rad0(:); 0; 0; 0];
+                ode_func = @(t,y) vtol_dynamics(t, y, P, time, pwm, func_T, func_Q, constants);
+            end
             [t_s, y_s] = ode45(ode_func, time, y0, ode_opts);
             y_out = interp1(t_s, y_s, time, 'linear', 'extrap');
 
@@ -86,6 +104,17 @@ function res = sim_window(mode, P, time, pwm, pqr_meas, att_meas, constants)
             res.theta = rad2deg(y_out(:,5));
             res.psi = rad2deg(y_out(:,6));
             res.u = y_out(:,7);  res.v = y_out(:,8);  res.w = y_out(:,9);
+
+            if USE_MOTOR
+                % Recalcula T_total e momentos a partir da RPM integrada
+                % (consistência com o acelerômetro e o probe de momentos).
+                res.rpm = y_out(:,10:13);
+                Tmr = (P(5:8)') .* (proj_p_sw.motor.kT_rpm * res.rpm.^2);   % Nx4
+                Qmr = (P(9:12)') .* (proj_p_sw.motor.kQ_rpm * res.rpm.^2);
+                [Mx, My, Mz] = moments_fn(Tmr, Qmr, Lx_r, Lx_l, Ly_f, Ly_r);
+                T_total = sum(Tmr, 2);
+                res.Mx = Mx; res.My = My; res.Mz = Mz; res.T_total = T_total;
+            end
 
         case 'hybrid'
             % Integra só p,q,r via vtol_dynamics em modo 3-estados.
@@ -164,10 +193,43 @@ function res = sim_window(mode, P, time, pwm, pqr_meas, att_meas, constants)
     q_dot_sig = gradient(res.q, dt);
     r_dot_sig = gradient(res.r, dt);
 
+    % arrasto translacional por amostra (rotor + estrutura ∝ V), coerente com o
+    % que o ode45 usou dentro do vtol_dynamics
+    kdm_sw = kdm_of(P, time, constants.m);
+    kvT = proj_p_sw.k_v_thrust;
+    if kvT > 0                                   % influxo no empuxo: T ← T − 4 k_v w
+        av = getappdata(0,'aero_vel');
+        if ~isempty(av), T_total = T_total - 4*kvT*interp1(av.t, av.w, time, 'linear', 0); end
+    end
+    % F_aero de placa plana (se ativa): força específica, soma ao acelerômetro
+    fa_acc = zeros(numel(time),3);
+    if isappdata(0,'faero_on')
+        av = getappdata(0,'aero_vel');
+        if ~isempty(av)
+            Vt = interp1(av.t, av.V, time, 'linear', 0);  vt = interp1(av.t, av.v, time, 'linear', 0);
+            wt = interp1(av.t, av.w, time, 'linear', 0);  ut = interp1(av.t, av.u, time, 'linear', 0);
+            kA = aero_gains();  Cp = 2;  qS = 0.5*kA.rho*kA.S;
+            measured = strcmp(getappdata(0,'faero_on'),'measured');
+            for kk = 1:numel(time)
+                if Vt(kk) < 0.05, continue; end
+                if measured
+                    CD0 = 0.05; CYb = -0.196; CL0 = 0.34; CLa = 2.94;  V = Vt(kk);
+                    fa_acc(kk,:) = [ -qS*CD0*V^2, qS*CYb*V*vt(kk), -qS*(CL0*V^2 + CLa*V*wt(kk)) ] / constants.m;
+                else
+                    al = atan2(wt(kk), max(ut(kk),1e-6));  be = asin(max(min(vt(kk)/Vt(kk),1),-1));
+                    CD = Cp*sin(al)*cos(be); CY = Cp*sin(be); CL = Cp*sin(al)*cos(al);
+                    R1 = [cos(al) 0 -sin(al); 0 1 0; sin(al) 0 cos(al)];
+                    R2 = [cos(be) -sin(be) 0; sin(be) cos(be) 0; 0 0 1];
+                    fa_acc(kk,:) = (0.5*kA.rho*Vt(kk)^2*kA.S * (R1*R2*[-CD;-CY;-CL]))' / constants.m;
+                end
+            end
+        end
+    end
     [res.accX, res.accY, res.accZ] = accelerometer_model( ...
         res.p, res.q, res.r, ...
         res.u, res.v, res.w, ...
         T_total/m, ...
         p_dot_sig, q_dot_sig, r_dot_sig, ...
-        r_imu);
+        r_imu, kdm_sw);
+    res.accX = res.accX + fa_acc(:,1);  res.accY = res.accY + fa_acc(:,2);  res.accZ = res.accZ + fa_acc(:,3);
 end

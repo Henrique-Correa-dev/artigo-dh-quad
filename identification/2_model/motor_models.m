@@ -29,6 +29,20 @@ function varargout = motor_models(varargin)
     end
 
     mode = varargin{1};
+
+    % Modo FÍSICO: PWM → RPM_ss = CR·PWM + ω_b → T=kT·RPM², Q=kQ·RPM².
+    % Constantes de parameters().motor (ajuste de bancada). O lag da RPM é
+    % aplicado FORA (pré-filtro no sinal), pois é dinâmica, não estática.
+    if strcmpi(mode, 'physical')
+        mo = parameters().motor;
+        rpm_ss = @(pwm) max(0, mo.CR .* min(max(pwm,1000),2000) + mo.Omega_b);
+        varargout{1} = @(pwm) mo.kT_rpm .* rpm_ss(pwm).^2;   % T  [N]
+        varargout{2} = @(pwm) mo.kQ_rpm .* rpm_ss(pwm).^2;   % Q  [N·m]
+        fprintf('Modelo de Motor FÍSICO: T,Q=k·(CR·PWM+ω_b)² | CR=%.3f ω_b=%.0f kT=%.2e kQ=%.2e\n', ...
+            mo.CR, mo.Omega_b, mo.kT_rpm, mo.kQ_rpm);
+        return;
+    end
+
     pwm_bp = varargin{2}(:);
 
     switch lower(mode)
@@ -68,9 +82,10 @@ end
 
 
 function [pwm_bp, T_grams, Q_Nm] = bench_table()
-% Tabela de bancada do motor de referência (RC Benchmark / Tyto Robotics).
-% Substituir por dados por motor quando os 4 forem medidos.
-    pwm_bp  = [1000; 1200; 1400; 1600; 1800; 2000];
-    T_grams = [0;    143;  328;  532;  784;  843];
-    Q_Nm    = [0.000; 0.034; 0.070; 0.115; 0.171; 0.176];
+% Tabela de bancada — FONTE ÚNICA em parameters.m (p.bench).
+% Hoje: motor real SunnySky A2212-15 800kV (T+RPM medidos; Q a re-medir).
+    p = parameters();
+    pwm_bp  = p.bench.pwm(:);
+    T_grams = p.bench.T_grams(:);
+    Q_Nm    = p.bench.Q_Nm(:);
 end

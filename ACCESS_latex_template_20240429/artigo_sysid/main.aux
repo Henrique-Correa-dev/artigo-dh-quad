@@ -1,0 +1,141 @@
+\relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\citation{c1}
+\citation{c2}
+\babel@aux{english}{}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
+\newlabel{sec:introducao}{{I}{1}{}{section.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Illustration of the flight phases of a hybrid VTOL.}}{1}{}\protected@file@percent }
+\newlabel{fig:fases_voo}{{1}{1}{}{figure.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}M4V Identification Method}{1}{}\protected@file@percent }
+\newlabel{sec:m4v}{{II}{1}{}{section.2}{}}
+\citation{c3}
+\citation{c13}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Diagram of the M4V method.}}{2}{}\protected@file@percent }
+\newlabel{fig:m4v}{{2}{2}{}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Mathematical Model of the Quadrotor Mode}{2}{}\protected@file@percent }
+\newlabel{sec:modelo}{{III}{2}{}{section.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Relationship of moments and forces applied by the motors.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone_config}{{3}{2}{}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces DH Hybrid-Drone VTOL aircraft.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone_real}{{4}{2}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Motor Model}{2}{}\protected@file@percent }
+\citation{c13}
+\citation{c13}
+\citation{c13}
+\citation{c13}
+\citation{c11}
+\citation{c13}
+\citation{c5}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Block diagram of the DH dynamic model with the three subsystems: Motor Model, Rotational Model, and Translational Model.}}{3}{}\protected@file@percent }
+\newlabel{fig:model_diagram}{{5}{3}{}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Block diagram of the motor model: the ESC converts the normalized command $\sigma _i$ into the steady-state angular rate (Equation~\eqref  {eq:omega-ss}), filtered by the first-order dynamics (Equation~\eqref  {eq:omega-lag}) and transformed into thrust and reaction torque (Equation~\eqref  {eq:tq}). Adapted from~\cite  {c13}.}}{3}{}\protected@file@percent }
+\newlabel{fig:blocos_motor}{{6}{3}{}{figure.6}{}}
+\newlabel{eq:norm}{{3}{3}{}{equation.3}{}}
+\newlabel{eq:omega-ss}{{4}{3}{}{equation.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Steady-state rotor angular rate as a function of the normalized PWM command. The points are the bench measurements and the solid line is the linear fit of Equation~\eqref  {eq:omega-ss}.}}{3}{}\protected@file@percent }
+\newlabel{fig:motor_pwm_rpm}{{7}{3}{}{figure.7}{}}
+\newlabel{eq:omega-lag}{{5}{3}{}{equation.5}{}}
+\newlabel{eq:tq}{{6}{3}{}{equation.6}{}}
+\citation{cBeard}
+\citation{c13}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Thrust (a) and reaction torque (b) as a function of the rotor angular rate. The points are the bench measurements and the solid lines are the quadratic fits of Equation~\eqref  {eq:tq}.}}{4}{}\protected@file@percent }
+\newlabel{fig:motor_tq}{{8}{4}{}{figure.8}{}}
+\newlabel{eq:qt-ratio}{{7}{4}{}{equation.7}{}}
+\newlabel{eq:aloca}{{8}{4}{}{equation.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Rotational Model}{4}{}\protected@file@percent }
+\newlabel{eq:rot-newton}{{9}{4}{}{equation.9}{}}
+\newlabel{eq:rot-compact}{{10}{4}{}{equation.10}{}}
+\citation{cBeard,c11}
+\citation{c4}
+\citation{c3}
+\citation{c2}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Translational Model}{5}{}\protected@file@percent }
+\newlabel{eq:trans-newton}{{24}{5}{}{equation.24}{}}
+\newlabel{eq:trans-compact}{{25}{5}{}{equation.25}{}}
+\newlabel{eq:trans-thrust}{{26}{5}{}{equation.26}{}}
+\newlabel{eq:trans-grav}{{27}{5}{}{equation.27}{}}
+\newlabel{eq:acc-imu}{{31}{5}{}{equation.31}{}}
+\newlabel{eq:theta}{{32}{5}{}{equation.32}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Parameter Estimation}{5}{}\protected@file@percent }
+\newlabel{sec:estimacao}{{IV}{5}{}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Equation-Error Method (EEM)}{5}{}\protected@file@percent }
+\citation{c2}
+\citation{c2}
+\citation{c2}
+\citation{c2}
+\citation{c2}
+\citation{c2}
+\citation{c2}
+\newlabel{eq:eem-res}{{33}{6}{}{equation.33}{}}
+\newlabel{eq:eem-cost}{{34}{6}{}{equation.34}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Output-Error Method (OEM)}{6}{}\protected@file@percent }
+\newlabel{eq:oem-cost}{{35}{6}{}{equation.35}{}}
+\newlabel{eq:sens}{{36}{6}{}{equation.36}{}}
+\newlabel{eq:gauss-newton}{{37}{6}{}{equation.37}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces General scheme of the output-error method. Adapted from~\cite  {c2}.}}{6}{}\protected@file@percent }
+\newlabel{fig:oem_schematic}{{9}{6}{}{figure.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Iterative cycle of the output-error method. Adapted from~\cite  {c2}.}}{6}{}\protected@file@percent }
+\newlabel{fig:opt_loop}{{10}{6}{}{figure.10}{}}
+\newlabel{eq:update}{{38}{6}{}{equation.38}{}}
+\citation{c2}
+\citation{c7}
+\citation{c8}
+\citation{c2}
+\citation{c3}
+\newlabel{eq:r2}{{39}{7}{}{equation.39}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Multi-Window Output-Error Method}{7}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Diagram of the identification process. Starting from the initial values {\mathversion  {normal}$\Theta _0$}, Phase~A (algebraic EEM) provides {\mathversion  {normal}$\Theta _{\text  {EEM}}$}, which feeds Phase~B: the OEM is executed and returns a {\mathversion  {normal}$\Theta _{OEM}$}.}}{7}{}\protected@file@percent }
+\newlabel{fig:oem_diagram}{{11}{7}{}{figure.11}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Methodology}{7}{}\protected@file@percent }
+\newlabel{sec:metodologia}{{V}{7}{}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Maneuvers and Data for Identification}{7}{}\protected@file@percent }
+\citation{c9}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Complete flight campaign: in green, the training windows ($\Delta T_1$--$\Delta T_3$, isolated axes); in orange, the validation windows ($\Delta T_4$, $\Delta T_5$, compound motion).}}{8}{}\protected@file@percent }
+\newlabel{fig:exc_dataset}{{12}{8}{}{figure.12}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Signal chain of the excitation in a flight segment: pilot command (RCIN), motor PWM (RCOU), generated moments ($\tau _x, \tau _y, \tau _z$), and response angular rates ($p, q, r$).}}{8}{}\protected@file@percent }
+\newlabel{fig:exc_overview}{{13}{8}{}{figure.13}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Fixed Model Constants}{8}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Fixed model constants.}}{9}{}\protected@file@percent }
+\newlabel{tab:const_iniciais}{{1}{9}{}{table.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Distances between the motors and the CG.}}{9}{}\protected@file@percent }
+\newlabel{fig:bracos}{{14}{9}{}{figure.14}{}}
+\newlabel{eq:aloca_num}{{41}{9}{}{equation.41}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {15}{\ignorespaces Misalignment of the IMU relative to the CG.}}{9}{}\protected@file@percent }
+\newlabel{fig:imu_offset}{{15}{9}{}{figure.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Dynamic Simulation of the Model}{9}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Results and Discussion}{9}{}\protected@file@percent }
+\newlabel{sec:resultados}{{VI}{9}{}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Parameter Estimation Result}{9}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Moments and products of inertia.}}{10}{}\protected@file@percent }
+\newlabel{tab:param_inercia}{{2}{10}{}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Thrust coefficients $c_{T_i}$ ($\times 10^{-7}$~N/RPM$^2$) per motor.}}{10}{}\protected@file@percent }
+\newlabel{tab:param_motor}{{3}{10}{}{table.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Reaction-torque coefficients $c_{M_i}$ ($\times 10^{-9}$~N$\cdot $m/RPM$^2$) per motor.}}{10}{}\protected@file@percent }
+\newlabel{tab:param_motor_cm}{{4}{10}{}{table.4}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Rotational damping coefficients.}}{10}{}\protected@file@percent }
+\newlabel{tab:param_rot}{{5}{10}{}{table.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Validation}{10}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {16}{\ignorespaces Angular rates: comparison of the responses of the models {\mathversion  {normal}$\Theta _0$}, {\mathversion  {normal}$\Theta _{\text  {EEM}}$}, and {\mathversion  {normal}$\Theta _{\text  {OEM}}$} against the measurements, on the validation segment.}}{10}{}\protected@file@percent }
+\newlabel{fig:pqr_val}{{16}{10}{}{figure.16}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {17}{\ignorespaces Accelerations (IMU specific force): comparison of the responses of the models {\mathversion  {normal}$\Theta _0$}, {\mathversion  {normal}$\Theta _{\text  {EEM}}$}, and {\mathversion  {normal}$\Theta _{\text  {OEM}}$} against the measurements, on the validation segment.}}{10}{}\protected@file@percent }
+\newlabel{fig:acc_val}{{17}{10}{}{figure.17}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Coefficient of determination $R^2$ per channel on the validation segment, for the initial model {\mathversion  {normal}$\Theta _0$} and the final model {\mathversion  {normal}$\Theta _{\text  {OEM}}$}.}}{10}{}\protected@file@percent }
+\newlabel{tab:r2_val}{{6}{10}{}{table.6}{}}
+\bibcite{c1}{1}
+\bibcite{c2}{2}
+\bibcite{c3}{3}
+\bibcite{c4}{4}
+\bibcite{c5}{5}
+\bibcite{c7}{6}
+\bibcite{c8}{7}
+\bibcite{c9}{8}
+\bibcite{c11}{9}
+\bibcite{c12}{10}
+\bibcite{cBeard}{11}
+\bibcite{c13}{12}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Conclusion}{11}{}\protected@file@percent }
+\newlabel{sec:conclusao}{{VII}{11}{}{section.7}{}}
+\@writefile{toc}{\contentsline {section}{References}{11}{}\protected@file@percent }
+\gdef \@abspage@last{11}

@@ -1,5 +1,5 @@
 function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
-    p_dot, q_dot, r_dot, T_ref, Q_ref, reg_lambda)
+    p_dot, q_dot, r_dot, T_ref, Q_ref, reg_lambda, aero)
 % EEM_COST_FUNCTION  Equation Error Method cost for VTOL identification.
 %
 %   No ODE integration. Uses measured states and numerically computed
@@ -10,8 +10,15 @@ function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
 %   P(5:8)   = k_T1..k_T4
 %   P(9:12)  = k_Q1..k_Q4
 %   P(13:15) = Dp, Dq, Dr
+%   P(16)    = C_d   (não entra no EEM: só afeta força/acelerômetro)
+%   P(17:22) = Cl_p, Cl_β, Cm_q, Cm_α, Cn_r, Cn_β  (aerodinâmica da estrutura)
 %   (Bz removido — modelo é rotacional puro agora)
 %   (Bp, Bq, Br REMOVIDOS — CG offset capturado via Lx/Ly assimétricos)
+%
+%   aero (opcional, struct): ativa os termos P(17:22). Campos V, v, w com o
+%     mesmo número de amostras de p,q,r (velocidade total e componentes de
+%     corpo, de 5_validation/estimate_velocity.m). Sem este argumento, ou com
+%     numel(P) < 22, o modelo é o rotacional puro de 15 parâmetros.
 %
 %   reg_lambda (opcional, struct):
 %     .kt_pair → penaliza |k_T1-k_T2| e |k_T3-k_T4| (default 0 = sem reg)
@@ -22,6 +29,7 @@ function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
     if nargin < 12, reg_lambda = struct('kt_pair', 0, 'kq_pair', 0); end
     if ~isfield(reg_lambda, 'kt_pair'), reg_lambda.kt_pair = 0; end
     if ~isfield(reg_lambda, 'kq_pair'), reg_lambda.kq_pair = 0; end
+    if ~isfield(reg_lambda, 'tri'),     reg_lambda.tri     = 0; end
 
     P = P_scaled(:) .* P0_scale(:);
 
@@ -57,9 +65,43 @@ function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
     % Mz: pares DIAGONAIS padrão ArduPilot (M1+M2 CCW, M3+M4 CW)
     Mz = Qmr(:,1) + Qmr(:,2) - Qmr(:,3) - Qmr(:,4);
 
-    p_dot_model = G1*p.*q - G2*q.*r + G3*Mx + G4*Mz - Dp*p;
-    q_dot_model = G5*p.*r - G6*(p.^2 - r.^2) + invJy*My - Dq*q;
-    r_dot_model = G7*p.*q - G1*q.*r + G4*Mx + G8*Mz - Dr*r;
+    % --- AERODINÂMICA DA ESTRUTURA (P(17:22), forma regular ∝ V) -----------
+    if nargin >= 13 && ~isempty(aero) && numel(P) >= 22
+        kA = aero_gains(proj_p);
+        Va = aero.V(:);  va = aero.v(:);  wa = aero.w(:);
+        Va(~isfinite(Va)) = 0;  va(~isfinite(va)) = 0;  wa(~isfinite(wa)) = 0;
+        Mx = Mx + kA.Lp*P(17)*Va.*p + kA.Lb*P(18)*Va.*va;
+        My = My + kA.Mq*P(19)*Va.*q + kA.Ma*P(20)*Va.*wa;
+        Mz = Mz + kA.Nr*P(21)*Va.*r + kA.Nb*P(22)*Va.*va;
+        % rotor: momento por velocidade de translação (NASA C_lv, C_mw, C_nv), sem V
+        if numel(P) >= 25
+            if isappdata(0,'hu_form')
+                qS = 0.5*kA.rho*Va.^2*kA.S;
+                Mx = Mx - qS*kA.b*P(23);  My = My - qS*kA.c*P(24);  Mz = Mz - qS*kA.b*P(25);
+            else
+                Mx = Mx - P(23)*va;  My = My - P(24)*wa;  Mz = Mz - P(25)*va;
+            end
+        end
+    end
+
+    % --- TESTE DE DIAGNÓSTICO (appdata 'diag_damp'): amortecimento ∝ V ---
+    dd = getappdata(0,'diag_damp');
+    if ~isempty(dd) && isstruct(dd) && any(strcmp(dd.mode,{'aero','hybrid'})) && isfield(dd,'V_eem') && numel(dd.V_eem)==numel(p)
+        Vv = dd.V_eem(:);
+        Dp_v = dd.c0(1) + Dp*Vv;  Dq_v = dd.c0(2) + Dq*Vv;  Dr_v = dd.c0(3) + Dr*Vv;
+    else
+        Dp_v = Dp;  Dq_v = Dq;  Dr_v = Dr;
+    end
+    % Forma do amortecimento: 'moment' soma dentro de M (padrão), 'rate' subtrai
+    % da derivada (legado). Ver parameters().damp_form.
+    dform = 'moment';  if isfield(proj_p,'damp_form'), dform = proj_p.damp_form; end
+    if strcmp(dform,'moment')
+        Mx = Mx - Dp_v.*p;  My = My - Dq_v.*q;  Mz = Mz - Dr_v.*r;
+        Dp_v = 0;  Dq_v = 0;  Dr_v = 0;
+    end
+    p_dot_model = G1*p.*q - G2*q.*r + G3*Mx + G4*Mz - Dp_v.*p;
+    q_dot_model = G5*p.*r - G6*(p.^2 - r.^2) + invJy*My - Dq_v.*q;
+    r_dot_model = G7*p.*q - G1*q.*r + G4*Mx + G8*Mz - Dr_v.*r;
 
     sqrt_w = sqrt(weights(:));
     e_dyn = [sqrt_w(1)*(p_dot - p_dot_model); ...
@@ -74,5 +116,13 @@ function e = eem_cost_function(P_scaled, P0_scale, weights, p, q, r, ...
              sqrt(reg_lambda.kq_pair) * (k_Q(1) - k_Q(2)); ...
              sqrt(reg_lambda.kq_pair) * (k_Q(3) - k_Q(4))];
 
-    e = [e_dyn; e_reg];
+    % Restrição física: desigualdade triangular dos momentos de inércia.
+    %   Jz ≤ Jx+Jy ,  Jy ≤ Jx+Jz ,  Jx ≤ Jy+Jz   (vale em qualquer frame).
+    %   Penaliza só a VIOLAÇÃO (one-sided): resíduo 0 se factível, cresce se
+    %   estoura. λ_tri grande (~1e4) ⇒ optimizer mantém inércias físicas.
+    e_tri = sqrt(reg_lambda.tri) * [ max(0, Jz - (Jx + Jy)); ...
+                                     max(0, Jy - (Jx + Jz)); ...
+                                     max(0, Jx - (Jy + Jz)) ];
+
+    e = [e_dyn; e_reg; e_tri];
 end

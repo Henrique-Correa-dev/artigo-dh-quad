@@ -1,0 +1,222 @@
+#=======================================================================
+# AVL dataset for VTOL ITA
+# Geometry program for estimate aerodynamic coefficients
+#=======================================================================
+
+VTOL ITA
+
+#--------------------------
+# AVL Axes:   
+#  +X   downstream
+#  +Y   out right wing
+#  +Z   up    
+#--------------------------
+
+#Mach
+0.0
+
+#iYsym      iZsym      Zsym
+0           0          0.0
+
+#Sref       Cref       Bref
+0.350       0.250      1.40
+
+#Xref       Yref       Zref
+0.0101     0.00000    0.030
+
+#CDp (optional)
+0.00
+
+#============================= Main Wing ===============================
+SURFACE
+Main Wing
+#Nchord    Cspace   [ Nspan Sspace ]
+3          1.0
+
+INDEX
+1480
+
+YDUPLICATE
+0.0
+
+SCALE
+1.0  1.0  1.0
+
+TRANSLATE
+0.0  0.0  0.0
+
+ANGLE
+0.500
+
+#---------------------------- wing panel 1 -----------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.0000    0.0000    0.0    0.300       1.000   19       3
+
+AFIL 0.0 1.0
+USA-35B AIRFOIL.dat
+
+#---------------------------- wing panel 2 -----------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.014    0.233     0.00     0.267     1.000    19       3
+
+AFIL 0.0 1.0
+USA-35B AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+aileron   -1.0       0.220       0.0        0.0        0.0       -1.0
+
+#---------------------------- wing panel 3 -----------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.027    0.466      0.0      0.233    1.000   19       3
+
+AFIL 0.0 1.0
+USA-35B AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+aileron   -1.0       0.200       0.0        0.0        0.0       -1.0
+
+#---------------------------- wing panel 4 -----------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.040    0.700    0.0      0.200      1.000   19       3
+
+AFIL 0.0 1.0
+USA-35B AIRFOIL.dat
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+aileron   -1.0       0.180       0.0        0.0        0.0       -1.0
+
+#========================== Horizontal tail ============================
+SURFACE
+Elevator
+#Nchord    Cspace   [ Nspan Sspace ]
+2          1.0
+
+INDEX
+1482
+
+YDUPLICATE
+0.0
+
+SCALE
+1.0  1.0  1.0
+
+TRANSLATE
+0.0  0.0  0.0
+
+ANGLE
+0.000
+
+#------------------------- Horizontal panel 1 --------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.6720    0.0000    0.0      0.160     0.000   7        0
+
+AFIL 0.0 1.0
+NACA 0002 AIRFOIL.dat
+
+
+
+#------------------------- Horizontal panel 2 --------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.6720    0.225    0.0        0.160    0.000   3        0
+
+AFIL 0.0 1.0
+NACA 0002 AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+elevator   1         0.110       0.0        0.0        0.0        1.0
+
+
+#=========================== Vertical tail =============================
+SURFACE
+Fin
+#Nchord    Cspace   [ Nspan Sspace ]
+7          1.0
+
+INDEX
+1483
+
+SCALE
+1.0  1.0  1.0
+
+TRANSLATE
+0.0  0.0  0.0
+
+ANGLE
+0.000
+
+
+
+#--------------------------- Vertical panel 1 --------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.7500    0.225    0.1510    0.090   0.000   7        0
+
+AFIL 0.0 1.0
+NACA 0002 AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+rudder     1.0       0.05       0.0        0.0        0.0        1.0
+
+#--------------------------- Vertical panel 2 --------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.672    0.225    0.0011    0.144   0.000   3        0
+
+AFIL 0.0 1.0
+NACA 0002 AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+rudder     1.0       0.104       0.0        0.0        0.0        1.0
+
+
+#=========================== Vertical tail =============================
+SURFACE
+Fin
+#Nchord    Cspace   [ Nspan Sspace ]
+7          1.0
+
+INDEX
+1483
+
+SCALE
+1.0  1.0  1.0
+
+TRANSLATE
+0.0  0.0  0.0
+
+ANGLE
+0.000
+#--------------------------- Vertical panel 1 --------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.7500    -0.225    0.1510    0.090   0.000   7        0
+
+AFIL 0.0 1.0
+NACA 0002 AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+rudder     1.0       0.05       0.0        0.0        0.0        1.0
+
+#--------------------------- Vertical panel 2 --------------------------
+SECTION
+#Xle      Yle       Zle       Chord    Ainc    Nspan    Sspace
+0.6720    -0.225    0.0011    0.144   0.000   3        0
+
+AFIL 0.0 1.0
+NACA 0002 AIRFOIL.dat
+
+CONTROL
+#name      gain      Xhinge      Xhvec      Yhvec      Zhvec      SgnDup
+rudder     1.0       0.104       0.0        0.0        0.0        1.0

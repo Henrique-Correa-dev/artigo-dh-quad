@@ -1,0 +1,92 @@
+\relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\catcode `"\active 
+\babel@aux{portuguese}{}
+\@writefile{toc}{\contentsline {section}{\numberline {I}INTRODUÇÃO}{1}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Ilustração das etapas de voo de um VTOL híbrido.}}{1}{}\protected@file@percent }
+\newlabel{fig:fases_voo}{{1}{1}{}{figure.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Diagrama do método M4V}}{1}{}\protected@file@percent }
+\newlabel{unet}{{2}{1}{}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}Método M4V de Identificação}{1}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Relação de momentos e forças aplicados pelos motores.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone_config}{{3}{2}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Modelo Matemático do Modo Quadricóptero}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Aeronave DH Hybrid-Drone VTOL.}}{2}{}\protected@file@percent }
+\newlabel{fig:drone_real}{{4}{2}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {III-A}Modelo do Motor}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Diagrama de blocos do modelo do motor: o ESC converte o comando normalizado $\sigma _i$ em velocidade angular de regime permanente (Equação~\eqref  {eq:omega-ss}), filtrada pela dinâmica de primeira ordem (Equação~\eqref  {eq:omega-lag}) e transformada em empuxo e contra-torque (Equação~\eqref  {eq:tq}). Adaptado de [13].}}{2}{}\protected@file@percent }
+\newlabel{fig:blocos_motor}{{5}{2}{}{figure.5}{}}
+\newlabel{eq:norm}{{3}{2}{}{equation.3}{}}
+\newlabel{eq:omega-ss}{{4}{3}{}{equation.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Velocidade angular do rotor em regime permanente em função do comando PWM normalizado. Os pontos são as medições de bancada e a linha contínua é o ajuste linear da Equação~\eqref  {eq:omega-ss}.}}{3}{}\protected@file@percent }
+\newlabel{fig:motor_pwm_rpm}{{6}{3}{}{figure.6}{}}
+\newlabel{eq:omega-lag}{{5}{3}{}{equation.5}{}}
+\newlabel{eq:tq}{{6}{3}{}{equation.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Empuxo (a) e contra-torque (b) em função da velocidade angular do rotor. Os pontos são as medições de bancada e as linhas contínuas são os ajustes quadráticos da Equação~\eqref  {eq:tq}.}}{3}{}\protected@file@percent }
+\newlabel{fig:motor_tq}{{7}{3}{}{figure.7}{}}
+\newlabel{eq:qt-ratio}{{7}{3}{}{equation.7}{}}
+\newlabel{eq:aloca}{{8}{3}{}{equation.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {III-B}Modelo Translacional}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {III-C}Modelo Rotacional}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Estimação de Parâmetros}{4}{}\protected@file@percent }
+\newlabel{eq:theta}{{25}{4}{}{equation.25}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV-A}Método de Erro de Equação (EEM)}{5}{}\protected@file@percent }
+\newlabel{eq:eem-res}{{26}{5}{}{equation.26}{}}
+\newlabel{eq:eem-cost}{{27}{5}{}{equation.27}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV-B}Método de Erro de Saída (OEM)}{5}{}\protected@file@percent }
+\newlabel{eq:oem-cost}{{28}{5}{}{equation.28}{}}
+\newlabel{eq:sens}{{29}{5}{}{equation.29}{}}
+\newlabel{eq:gauss-newton}{{30}{5}{}{equation.30}{}}
+\newlabel{eq:update}{{31}{5}{}{equation.31}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Ciclo iterativo do m\'etodo do erro de sa\'ida: o modelo \'e integrado com os par\^ametros correntes, o erro de sa\'ida alimenta o \texttt  {lsqnonlin}, que calcula internamente as sensibilidades (Equa\c {c}\~ao~\eqref  {eq:sens}) e o passo de atualiza\c {c}\~ao (Equa\c {c}\~ao~\eqref  {eq:update}); ap\'os a converg\^encia, o ajuste \'e avaliado pelo $R^2$ (Equa\c {c}\~ao~\eqref  {eq:r2}) no segmento de valida\c {c}\~ao. Adaptado de [2].}}{5}{}\protected@file@percent }
+\newlabel{fig:opt_loop}{{8}{5}{}{figure.8}{}}
+\newlabel{eq:r2}{{32}{6}{}{equation.32}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {IV-C}Método de Erro de Saída com Multijanelas}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Diagrama do processo de identifica\c {c}\~ao por OEM com multijanelas progressivas. A partir dos valores iniciais $\Theta _0$, a Fase~A (EEM alg\'ebrico) fornece $\Theta _{\text  {EEM}}$, que inicializa a Fase~B (OEM com janelas de dura\c {c}\~ao crescente); cada janela gera um modelo $\Theta _{\text  {OEM},i}$, e o melhor conjunto de par\^ametros $\Theta ^*$ \'e selecionado com base no $R^2$ do segmento de valida\c {c}\~ao.}}{6}{}\protected@file@percent }
+\newlabel{fig:oem_diagram}{{9}{6}{}{figure.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Metodologia}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {V-A}Manobras e Dados para Identificação}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Dados de Identificação}}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {V-B}Constantes Iniciais}{7}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Distâncias entre os motores e o CG.}}{7}{}\protected@file@percent }
+\newlabel{fig:bracos}{{11}{7}{}{figure.11}{}}
+\newlabel{eq:aloca_num}{{34}{7}{}{equation.34}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Valores iniciais do modelo.}}{7}{}\protected@file@percent }
+\newlabel{tab:const_iniciais}{{I}{7}{}{table.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Desalinhamento da IMU em relação ao CG.}}{7}{}\protected@file@percent }
+\newlabel{fig:imu_offset}{{12}{7}{}{figure.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {V-C}Simulação Dinâmica do Modelo}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}RESULTADO E DISCUSSÕES}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI-A}Resultado da Estimação dos Parâmetros}{7}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Diagrama de blocos do modelo din\^amico do VANT. As entradas PWM alimentam os modelos de empuxo e torque. Linhas tracejadas indicam sinais que alimentam a din\^amica translacional.}}{8}{}\protected@file@percent }
+\newlabel{fig:model_diagram}{{13}{8}{}{figure.13}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Momentos e produtos de inércia. a coluna CRB indica o desvio-padr\~ao relativo da estimativa (limite de Cramér-Rao).}}{8}{}\protected@file@percent }
+\newlabel{tab:param_inercia}{{II}{8}{}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Coeficientes de empuxo $c_{T_i}$ ($\times 10^{-7}$~N/RPM$^2$) e de contra-torque $c_{M_i}$ ($\times 10^{-9}$~N$\cdot $m/RPM$^2$) por motor; CRB \'e o desvio-padr\~ao relativo da estimativa.}}{8}{}\protected@file@percent }
+\newlabel{tab:param_motor}{{III}{8}{}{table.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Velocidades angulares: comparação das respostas dos modelos $P_0$, EEM e OEM final às medições, no segmento de valida\c {c}\~ao.}}{8}{}\protected@file@percent }
+\newlabel{fig:pqr_val}{{14}{8}{}{figure.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {15}{\ignorespaces Acelera\c {c}\~oes (for\c {c}a espec\'ifica da IMU): comparação das respostas dos modelos $P_0$, EEM e OEM final às medições, no segmento de valida\c {c}\~ao.}}{8}{}\protected@file@percent }
+\newlabel{fig:acc_val}{{15}{8}{}{figure.15}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Coeficientes de amortecimento rotacional; CRB \'e o desvio-padr\~ao relativo da estimativa.}}{8}{}\protected@file@percent }
+\newlabel{tab:param_rot}{{IV}{8}{}{table.4}{}}
+\bibcite{c1}{1}
+\bibcite{c2}{2}
+\bibcite{c3}{3}
+\bibcite{c4}{4}
+\bibcite{c5}{5}
+\bibcite{c6}{6}
+\bibcite{c7}{7}
+\bibcite{c8}{8}
+\bibcite{c9}{9}
+\bibcite{c10}{10}
+\bibcite{c11}{11}
+\bibcite{c12}{12}
+\bibcite{c13}{13}
+\@writefile{toc}{\contentsline {subsection}{\numberline {VI-B}Validação}{9}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Coeficiente de determinação $R^2$ por canal no segmento de validação.}}{9}{}\protected@file@percent }
+\newlabel{tab:r2_val}{{V}{9}{}{table.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}CONCLUSÃO}{9}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{9}{}\protected@file@percent }
+\gdef \@abspage@last{9}

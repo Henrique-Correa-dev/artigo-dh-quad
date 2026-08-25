@@ -1,0 +1,55 @@
+%% Diagrama B — MESMO controlador no MODELO NAO-LINEAR (validacao)
+%% Estilo: Figura 4 de Hu et al., Drones 2024, 8, 93 (adaptado)
+flowchart LR
+    HSP["h_sp"]:::ref --> ALT
+    VHSP["v_horizontal_sp"]:::ref --> VEL
+    PSISP["psi_sp"]:::ref --> ACC
+
+    subgraph POS["POSITION CONTROLLER"]
+        direction LR
+        ALT["Altitude<br/>Control"]:::ctrl -->|v_vertical_sp| VEL["Velocity<br/>Control"]:::ctrl
+    end
+
+    VEL -->|a_sp| ACC["Acceleration<br/>and Yaw<br/>to Attitude"]:::conv
+    ACC -->|"Theta_sp (phi_c, theta_c)"| ATT
+    ACC -->|T| TM
+
+    subgraph ATTC["ATTITUDE CONTROLLER"]
+        direction LR
+        ATT["Attitude<br/>Control"]:::ctrl -->|omega_sp| RATE["Angular Rate<br/>Control"]:::ctrl
+    end
+
+    RATE -->|"tau_sp (Mx,My,Mz)"| TM["u = [T, Mx, My, Mz]"]:::sig
+
+    subgraph ALLOC["CONTROL ALLOCATION (= a PONTE)"]
+        direction LR
+        MMIX["Alocacao<br/>M_mix = inv(M_alloc)<br/>[T,M] -> empuxo/motor"]:::bridge -->|"T_i por motor"| FINV["Motor inverso<br/>fT^-1: empuxo -> PWM"]:::bridge
+    end
+
+    TM ==> ALLOC
+    ALLOC -->|"PWM_1..PWM_4"| PLANT
+
+    subgraph PLANT["PLANTA NAO-LINEAR (vtol_dynamics, entrada PWM)"]
+        direction LR
+        MOT["Motor<br/>fT: PWM->empuxo<br/>fQ: PWM->contratorque"]:::plant -->|"T_i, Q_i"| MIX["Mixer fwd<br/>-> T, Mx, My, Mz"]:::plant
+        MIX --> RB["Corpo rigido<br/>6-DOF + Euler"]:::plant
+    end
+
+    PLANT --> ST["9 estados"]:::state
+
+    %% Realimentacoes
+    ST -. "h, v" .-> POS
+    ST -. "Theta" .-> ATT
+    ST -. "omega" .-> RATE
+
+    NOTE["MODELO NAO-LINEAR: o MESMO controlador, mas [T,M]<br/>passa pela CONTROL ALLOCATION (M_mix + fT^-1) virando PWM.<br/>O plant reconverte PWM->[T,M] internamente -><br/>as duas conversoes se cancelam perto do hover."]:::note
+    NOTE -.-> ALLOC
+
+    classDef ref fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef ctrl fill:#fff3e0,stroke:#e65100,color:#000
+    classDef conv fill:#ede7f6,stroke:#4527a0,color:#000
+    classDef bridge fill:#fce4ec,stroke:#c2185b,color:#000
+    classDef plant fill:#e8f5e9,stroke:#2e7d32,color:#000
+    classDef state fill:#f3e5f5,stroke:#6a1b9a,color:#000
+    classDef sig fill:#fafafa,stroke:#555,color:#000
+    classDef note fill:#fffde7,stroke:#f9a825,color:#000

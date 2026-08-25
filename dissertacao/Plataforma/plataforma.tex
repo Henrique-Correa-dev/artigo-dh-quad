@@ -40,9 +40,17 @@ Receptor GPS           & u-blox geração M8 \\
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.5\textwidth]{Cap5/bracos.png}
-    \caption{Distâncias entre os motores e o CG.}
-    \label{fig:sim-braco}
+    \subfloat[Distâncias entre os motores e o CG.]{%
+        \includegraphics[width=0.42\textwidth]{Cap5/bracos.png}%
+        \label{fig:sim-braco}%
+    }
+    \hfill
+    \subfloat[Desalinhamento da IMU em relação ao CG.]{%
+        \includegraphics[width=0.55\textwidth]{Cap3/displacement.png}%
+        \label{fig:imu-offset}%
+    }
+    \caption{Geometria da plataforma: braços dos rotores e posição da IMU.}
+    \label{fig:geometria-plataforma}
 \end{figure}
 
 Partindo da estrutura da Equação~\eqref{eq:alocacao} e substituindo as distâncias da Figura~\ref{fig:sim-braco} ($L_{x_l}=L_{x_r}=0{,}232$~m, $L_{y_f}=0{,}330$~m e $L_{y_r}=0{,}323$~m) e a razão entre os coeficientes de bancada ${c_M}/{c_T}=0{,}0286$~m (Apêndice~\ref{ap:bancada}), obtém-se a matriz de alocação inicial $\mathbf{B_0}$, que assume a forma numérica
@@ -56,13 +64,6 @@ Partindo da estrutura da Equação~\eqref{eq:alocacao} e substituindo as distân
 \end{bmatrix},
 \label{eq:alocacao-num}
 \end{equation}
-
-\begin{figure}[ht]
-    \centering
-    \includegraphics[width=0.7\textwidth]{Cap3/displacement.png}
-    \caption{Desalinhamento da IMU em relação ao CG.}
-    \label{fig:imu-offset}
-\end{figure}
 
 que agrega os empuxos dos quatro rotores $[\,T_1\ T_2\ T_3\ T_4\,]^{\top}$ no empuxo total e nos momentos $[\,T\ \tau_x\ \tau_y\ \tau_z\,]^{\top}$ aplicados ao corpo rígido. Vale ressaltar que conforme a estimação dos parâmetros atualiza as constantes dos motores, esta matriz $\mathbf{B}$ é atualizada.
 
@@ -102,7 +103,13 @@ Os ensaios deste trabalho foram realizados com uma controladora de voo Pixhawk m
 
 \subsection{Sensores inerciais (acelerômetro e giroscópio)}
 
-As grandezas inerciais provêm da unidade de medição inercial (IMU) integrada à controladora, um sensor InvenSense MPU-6000 que reúne, em um mesmo encapsulamento, um acelerômetro e um giroscópio de três eixos. O giroscópio fornece as velocidades angulares $p$, $q$ e $r$ no referencial do corpo, e o acelerômetro fornece as forças específicas $a_x$, $a_y$ e $a_z$, ambas registradas a aproximadamente $25$~Hz nos logs. O giroscópio apresenta ruído baixo, da ordem de $5\times10^{-4}$~rad/s em repouso, ao passo que o acelerômetro carrega o ruído de vibração dos motores. É importante notar que a atitude $(\phi,\theta,\psi)$ não é medida diretamente: ela é estimada pelo EKF da controladora, combinando o giroscópio, o acelerômetro e o magnetômetro, com a guinada apoiada em um estimador dedicado. Essa característica está na origem da menor observabilidade do eixo de guinada, discutida nos capítulos seguintes.
+As grandezas inerciais provêm da unidade de medição inercial (IMU) integrada à controladora, um sensor InvenSense MPU-6000 que reúne, em um mesmo encapsulamento, um acelerômetro e um giroscópio de três eixos. O giroscópio fornece as velocidades angulares $p$, $q$ e $r$ no referencial do corpo, e o acelerômetro fornece as forças específicas $a_x$, $a_y$ e $a_z$, ambas registradas a aproximadamente $25$~Hz nos logs. Cabe distinguir essas taxas de registro da taxa de execução do laço de controle. Os $25$~Hz referem-se apenas à gravação dos dados, posteriormente reamostrados na grade comum de $10$~Hz empregada na identificação, conforme o Capítulo~4. A essa taxa corresponde uma frequência de Nyquist de $5$~Hz: componentes espectrais acima desse limite tornam-se, após a amostragem, indistinguíveis de componentes de frequência mais baixa e distorcem o espectro do sinal amostrado, efeito conhecido como \textit{aliasing} \cite{Aguirre2015}. O projeto não incorre nesse problema por dois motivos. Primeiro, as dinâmicas de interesse concentram-se abaixo de $2$~Hz, atendendo ao critério de Nyquist com margem superior a duas vezes \cite{Jategaonkar2015}. Segundo, o conteúdo de alta frequência remanescente, como o ruído de vibração dos motores, é atenuado pela filtragem de Savitzky--Golay do tratamento de dados, e a análise espectral das manobras, apresentada no Capítulo~5, confirma a energia concentrada em torno de $1$~Hz, sem componentes espúrias na banda de interesse.
+
+Cabe reconhecer, contudo, o que a taxa dos dados limita: o alcance da própria identificação. Dados amostrados a $10$~Hz só revelam comportamento até a frequência de Nyquist de $5$~Hz e, na prática, as manobras de excitação concentram energia até cerca de $2$~Hz. O modelo identificado está, portanto, validado nessa faixa. Acima dela, ele não está incorreto, mas não verificado: dinâmicas mais rápidas, como eventuais modos de flexão estrutural, não são visíveis nos dados e, por consequência, não estão contidas no modelo. Essa limitação não compromete os resultados do trabalho por duas razões. As malhas de controle projetadas possuem banda passante em torno de $1$~Hz, dentro da faixa validada, e a dinâmica rápida relevante do laço, a do conjunto motor--ESC, foi caracterizada separadamente em bancada, com instrumentação dedicada (Apêndice~\ref{ap:bancada}).
+
+O laço de controle não opera nessas taxas: o \textit{firmware} embarcado executa o controle de atitude a $400$~Hz, e as simulações deste trabalho atualizam o controlador a $100$~Hz, mais de cem vezes o polo dominante de malha fechada ($\omega_n = 6$~rad/s na atitude), razão que supera as recomendações práticas para a implementação digital de projetos em tempo contínuo.
+
+O giroscópio apresenta ruído baixo: o \textit{datasheet} do MPU-6000 especifica densidade espectral de ruído de $0{,}005~^{\circ}/\mathrm{s}/\sqrt{\mathrm{Hz}}$ \cite{Invensense2013}, o que projeta, na banda de $12{,}5$~Hz dos registros, um ruído eficaz da ordem de $3\times10^{-4}$~rad/s. O valor observado em repouso nos logs, de aproximadamente $5\times10^{-4}$~rad/s, é coerente com essa especificação. O acelerômetro, por sua vez, carrega o ruído de vibração dos motores. É importante notar que a atitude $(\phi,\theta,\psi)$ não é medida diretamente: ela é estimada pelo EKF da controladora, combinando o giroscópio, o acelerômetro e o magnetômetro, com a guinada apoiada em um estimador dedicado. Essa característica está na origem da menor observabilidade do eixo de guinada, discutida nos capítulos seguintes.
 
 \section{Campanha de voo}\label{sec:campanha}
 
@@ -110,16 +117,20 @@ A campanha de voo compreendeu uma série de manobras, com o objetivo de excitar 
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=\textwidth]{Cap5/voo1.png}
+    \includegraphics[width=0.8\textwidth]{Cap5/voo1.png}
     \caption{Campanha de voo no ginásio do COCTA.}
     \label{fig:campanha-voo}
 \end{figure}
 
-Durante a campanha tiveram trechos com quedas, perturbações e movimentos indesejados, os quais foram descartados, selecionando-se as melhores janelas para o treinamento e a validação. Para o \emph{treinamento}, priorizaram-se janelas que isolam um eixo de cada vez, guinada ($0$--$40$~s), rolagem ($40$--$80$~s) e arfagem ($80$--$125$~s) tornando a dinâmica de cada canal identificável separadamente, conforme debatido na seção de manobras e dados de entrada. Para a \emph{validação}, reservaram-se janelas com movimentos compostos, $450$--$470$~s e $605$--$625$~s, em que os três eixos foram estimulados simultaneamente, avaliando o modelo em condições distintas das de treino, acoplando os efeitos para evitar o sobreajuste de um dos eixos. A Figura~\ref{fig:exc_dataset} apresenta a campanha completa, com as janelas destacadas.
+Durante a campanha ocorreram trechos com quedas, perturbações e movimentos indesejados, descartados por corresponderem a regimes fora das hipóteses do modelo. As janelas aproveitadas para o treinamento e a validação foram selecionadas pelos critérios objetivos de qualidade da excitação definidos no Capítulo~4, como relação sinal-ruído, isolamento entre eixos e conteúdo em frequência, e não pelo desempenho do modelo sobre elas. Para o treinamento, priorizaram-se janelas que isolam um eixo de cada vez, guinada ($0$--$40$~s), rolagem ($40$--$80$~s) e arfagem ($80$--$125$~s) tornando a dinâmica de cada canal identificável separadamente, conforme debatido na seção de manobras e dados de entrada. Para a validação, reservaram-se janelas com movimentos compostos, $450$--$470$~s e $605$--$625$~s, em que os três eixos foram estimulados simultaneamente, avaliando o modelo em condições distintas das de treino, acoplando os efeitos para evitar o sobreajuste de um dos eixos. A Figura~\ref{fig:exc_dataset} apresenta a campanha completa, com as janelas destacadas.
 
 \begin{figure}[ht]
     \centering
     \includegraphics[width=\textwidth]{Cap5/excitacao_dataset.png}
-    \caption{Campanha de voo completa: em verde, as janelas de treino; em laranja, as janelas de validação.}
+    \caption{Campanha de voo, com as janelas de treino (verde) e de validação (laranja). O eixo do tempo é interrompido entre $150$ e $400$~s e truncado em $650$~s.}
     \label{fig:exc_dataset}
 \end{figure}
+
+Da Figura~\ref{fig:exc_dataset} conclui-se que a campanha fornece o que a identificação requer: nas janelas de treino, trens de \textit{doublets} com um único eixo excitado por vez, visíveis como pulsos isolados de guinada, rolagem e arfagem, nas janelas de validação, comandos simultâneos nos três eixos, e, fora delas, os trechos de pouso e perturbação descartados.
+
+Essa inspeção visual, contudo, constitui apenas uma triagem preliminar. A verificação quantitativa da qualidade dos dados é realizada no Capítulo~5, no qual cada janela é avaliada pelos critérios numéricos de conteúdo em frequência, relação sinal-ruído e isolamento entre eixos, com os resultados reunidos em tabelas, incluindo a menor autoridade do canal de guinada, quantificada ali.

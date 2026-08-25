@@ -1,0 +1,41 @@
+#-------------------------------------------------
+#
+#   Vtol ITA
+#
+#  Dimensional unit and parameter data.
+#  Mass & Inertia breakdown.
+#-------------------------------------------------
+#  Names and scalings for units to be used for trim and eigenmode calculations.
+#  The Lunit and Munit values scale the mass, xyz, and inertia table data below.
+#  Lunit value will also scale all lengths and areas in the AVL input file.
+#
+Lunit =     1.0000 m
+Munit =     0.0010 kg
+Tunit = 1.0 s
+#-------------------------
+#  Gravity and density to be used as default values in trim setup (saves runtime typing).
+#  Must be in the unit names given above (i.e. m,kg,s).
+g   = 9.81
+rho = 1.225
+#-------------------------
+#  Mass & Inertia breakdown.
+#  x y z  is location of item's own CG.
+#  Ixx... are item's inertias about item's own CG.
+#
+#  x,y,z system here must be exactly the same one used in the .avl input file
+#     (same orientation, same origin location, same length units)
+#
+#     mass          x          y          z        Ixx        Iyy        Izz        Ixy        Ixz        Iyz 
+       500      0.103  -1.17e-16     0.0994      0.000      0.000      0.000          0          0          0 ! Main Wing
+       100      0.746     -1e-18          0      0.000      0.000      0.000          0          0          0 ! Elevator
+       200      0.768  -1.01e-16     0.0625      0.000      0.000      0.000          0          0          0 ! Fin
+       220       0.02          0          0      0.000      0.000      0.000 ! Battery
+       180      -0.25          0          0      0.000      0.000      0.000 ! Motor, Helice, Frame
+       180      0.222      0.233          0      0.000      0.000      0.000 ! Motor, Helice, Vert 1
+       180     -0.426      0.233          0      0.000      0.000      0.000 ! Motor, Helice, Vert 2
+       180      0.222     -0.233          0      0.000      0.000      0.000 ! Motor, Helice, Vert 1
+       180     -0.426     -0.233          0      0.000      0.000      0.000 ! Motor, Helice, Vert 2
+       460        0.1          0          0      0.000      0.000      0.000 ! Electronic board
+       180       0.08          0          0      0.000      0.000      0.000 ! Fuselage
+        25      0.126      0.466      0.095      0.000      0.000      0.000 ! Right servo
+        25      0.126     -0.466      0.095      0.000      0.000      0.000 ! Left servo

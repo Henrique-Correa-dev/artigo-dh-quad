@@ -22,7 +22,7 @@ function compare_models(mode, varargin)
 %   compare_models('all')        % Roda os 3 modos em sequência
 %
 % NOTAS:
-%   - Os 3 modos usam função vtol_dynamics.m (modo 17 estados com lag).
+%   - Os 3 modos usam função vtol_dynamics.m (modo 9 estados, sem lag).
 %   - O .slx alvo é sempre quad_model_v4.
 %   - Modelos de motor: spline Akima da bancada (mesma usada no .slx).
 %   - Massa e gravidade vêm de parameters.m (FONTE ÚNICA).
@@ -61,7 +61,7 @@ fprintf('\n========== MODO: log (v4.slx vs vtol_dynamics.m vs medido) ==========
 % ╚══════════════════════════════════════════════════════════════════╝
 show.medido = true;    % verde: dados do log experimental (IMU + EKF)
 show.v4     = true;    % azul: quad_model_v4.slx (Simulink)
-show.script = true;    % vermelho: vtol_dynamics.m (script, 17 estados)
+show.script = true;    % vermelho: vtol_dynamics.m (script, 9 estados)
 show.linear = false;    % magenta: modelo linear (precisa outputs/linear_model.mat)
 
 bdclose all;
@@ -75,10 +75,9 @@ ref     = gv('ref');
 phi0    = gv('phi0');
 theta0  = gv('theta0');
 psi0    = gv('psi0');
-tau_m   = gv('tau_motor');
 
 [func_T, func_Q] = build_motor_models();
-constants_sim = build_constants(tau_m);
+constants_sim = build_constants();
 
 sim_dict = struct();
 
@@ -89,14 +88,14 @@ if show.v4
     sim_dict.v4 = pack_sim(state_v4, acc_v4);
 end
 
-% --- vtol_dynamics.m (script, 17 estados) ---
+% --- vtol_dynamics.m (script, 9 estados) ---
 if show.script
-    y0 = build_y0_17(P_J, ref.pwm(1,:), phi0, theta0, psi0, func_T, func_Q);
+    y0 = build_y0_9(P_J, ref.pwm(1,:), phi0, theta0, psi0, func_T, func_Q);
     ode_opts = odeset('RelTol', 1e-6, 'AbsTol', 1e-9);
     [t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P_J, ref.time, ref.pwm, ...
         func_T, func_Q, constants_sim), ref.time, y0, ode_opts);
     y_script = interp1(t_s, y_s, ref.time, 'linear', 'extrap');
-    state_script = unpack_states_17(y_script);
+    state_script = unpack_states_9(y_script);
     [udot, vdot, wdot] = compute_dots(P_J, ref.time, ref.pwm, y_script, ...
         func_T, func_Q, constants_sim);
     state_script.udot = udot; state_script.vdot = vdot; state_script.wdot = wdot;
@@ -145,14 +144,19 @@ function state = simulate_linear_for_log(lm, t_vec, pwm)
 N = numel(t_vec); dt = t_vec(2) - t_vec(1);
 nx = size(lm.A, 1);
 
-du = pwm - lm.u0(:)';   % perturbação em PWM (4 cols)
+% Entrada do modelo linear = FORÇAS [T,Mx,My,Mz]. Converte PWM logado via a
+% ALOCAÇÃO (forces handle + tabelas) — a mesma do modelo NL.
+[fT_l, fQ_l] = motor_models();
+dyn_l = vtol_dynamics('get_handles');
+[Tt_l, Mxt_l, Myt_l, Mzt_l] = dyn_l.forces(pwm, lm.P, fT_l, fQ_l);
+dv = [Tt_l, Mxt_l, Myt_l, Mzt_l] - lm.u0(:)';   % perturbação em [T,M] (4 cols)
 dx = zeros(N, nx);
-dx_dot = zeros(N, nx);  % derivadas REAIS do modelo linear (A*dx + B*du)
+dx_dot = zeros(N, nx);  % derivadas REAIS do modelo linear (A*dx + B*dv)
 for k = 1:N-1
-    dx_dot(k,:) = (lm.A * dx(k,:)' + lm.B * du(k,:)')';
+    dx_dot(k,:) = (lm.A * dx(k,:)' + lm.B * dv(k,:)')';
     dx(k+1,:)   = dx(k,:) + dt * dx_dot(k,:);
 end
-dx_dot(N,:) = (lm.A * dx(N,:)' + lm.B * du(N,:)')';
+dx_dot(N,:) = (lm.A * dx(N,:)' + lm.B * dv(N,:)')';
 y = dx + lm.x0(:)';
 
 state = struct('p', y(:,1), 'q', y(:,2), 'r', y(:,3), ...
@@ -178,8 +182,7 @@ bdclose all; clear; clc;
 % --- Parâmetros (P0 - chute inicial) ---
 P_J = default_P0();
 [func_T, func_Q] = build_motor_models();
-tau_m = 0.05;
-constants = build_constants(tau_m);
+constants = build_constants();
 phi0 = 0; theta0 = 0; psi0 = 0;
 
 % --- Cenários ---
@@ -209,7 +212,6 @@ added = add_outports(model, sub_specs);
 % Workspace: setup que o quad_model_v4 lê
 P_estimated = P_J_to_simulink(P_J); %#ok<NASGU>
 assignin('base', 'P_estimated', P_estimated);
-assignin('base', 'tau_motor', tau_m);   % MotorLag T1..T4, Q1..Q4 lêem isso
 
 % --- Loop principal ---
 results = struct();
@@ -227,15 +229,6 @@ for s = 1:numel(scenarios)
         assignin('base', nm{1}, z_ts);
     end
 
-    pwm0 = sc.pwm(1,:);
-    T_eff_init = zeros(4,1); Q_eff_init = zeros(4,1);
-    for i = 1:4
-        T_eff_init(i) = func_T(pwm0(i));
-        Q_eff_init(i) = func_Q(pwm0(i));
-    end
-    assignin('base', 'T_eff_init', T_eff_init);
-    assignin('base', 'Q_eff_init', Q_eff_init);
-
     set_param(model, 'StopTime', num2str(T_end));
     out  = sim(model);
     yout = out.yout;
@@ -244,13 +237,11 @@ for s = 1:numel(scenarios)
 
     % vtol_dynamics no script (mesmas ICs do v4: p=0, q=-0.1, r=-0.1)
     y0_9  = [0; -0.1; -0.1; phi0; theta0; psi0; 0; 0; 0];
-    k_T = P_J(5:8); k_Q = P_J(9:12);
-    y0_17 = [y0_9; T_eff_init .* k_T; Q_eff_init .* k_Q];
     ode_opts = odeset('RelTol',1e-6,'AbsTol',1e-9);
     [t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P_J, t_vec, sc.pwm, ...
-        func_T, func_Q, constants), t_vec, y0_17, ode_opts);
+        func_T, func_Q, constants), t_vec, y0_9, ode_opts);
     y_sc = interp1(t_s, y_s, t_vec, 'linear','extrap');
-    state_sc = unpack_states_17(y_sc);
+    state_sc = unpack_states_9(y_sc);
 
     % Erros relativos (% da amplitude do v4)
     fields = {'p','q','r','phi','theta','psi','u','v','w'};
@@ -306,7 +297,7 @@ lm = load(lm_path);
 % Pegar P_J consistente com o ponto de linearização
 P_J = default_P0();
 [func_T, func_Q] = build_motor_models();
-constants = build_constants(0.05);
+constants = build_constants();
 
 % Re-trim numérico para garantir consistência atual (PWM_f ≠ PWM_r por dx_cg)
 fprintf('\nBuscando trim numérico (fsolve)...\n');
@@ -331,7 +322,7 @@ for s = 1:numel(perturb_scenarios)
     fprintf('\nCenario: %s\n', sc.name);
 
     % NL.m (script)
-    y0 = build_y0_17_at_trim(P_J, pwm_trim, func_T, func_Q);
+    y0 = build_y0_9_at_trim(P_J, pwm_trim, func_T, func_Q);
     [t_s, y_s] = ode45(@(t,y) vtol_dynamics(t, y, P_J, t_vec, sc.pwm, ...
         func_T, func_Q, constants), t_vec, y0, odeset('RelTol',1e-8,'AbsTol',1e-10));
     y_nlm = interp1(t_s, y_s, t_vec, 'linear', 'extrap');
@@ -371,12 +362,10 @@ function [func_T, func_Q] = build_motor_models()
 [func_T, func_Q] = motor_models();
 end
 
-function c = build_constants(tau_motor)
+function c = build_constants()
 % Massa e gravidade vêm de parameters.m (fonte única — slide oficial)
 p = parameters();
-c = struct('m', p.m, 'g', p.g, 'tau_motor', tau_motor);
-% ATENÇÃO: o v4.slx ainda usa massa 1.6011 no bloco Massa. Para máxima
-% consistência com .slx, manter v4.slx atualizado também (task #72 parcial).
+c = struct('m', p.m, 'g', p.g);
 end
 
 function P_J = default_P0()
@@ -385,25 +374,19 @@ p = parameters();
 P_J = p.P0_J;
 end
 
-function y0 = build_y0_17(P_J, pwm0, phi0, theta0, psi0, func_T, func_Q)
-% 17 estados: [p q r phi theta psi u v w T_eff(1:4) Q_eff(1:4)]
+function y0 = build_y0_9(~, ~, phi0, theta0, psi0, ~, ~)
+% 9 estados: [p q r phi theta psi u v w]  (sem lag de motor)
 %
 % ICs de p,q,r: [0; -0.1; -0.1] para CASAR com os integradores
 % hardcoded do quad_model_v4.slx. Mudar aqui se v4.slx for atualizado.
-T_eff = zeros(4,1); Q_eff = zeros(4,1);
-k_T = P_J(5:8); k_Q = P_J(9:12);
-for i = 1:4
-    T_eff(i) = k_T(i) * func_T(pwm0(i));
-    Q_eff(i) = k_Q(i) * func_Q(pwm0(i));
-end
-y0 = [0; -0.1; -0.1; phi0; theta0; psi0; 0; 0; 0; T_eff; Q_eff];
+y0 = [0; -0.1; -0.1; phi0; theta0; psi0; 0; 0; 0];
 end
 
-function y0 = build_y0_17_at_trim(P_J, pwm_trim, func_T, func_Q)
-y0 = build_y0_17(P_J, pwm_trim, 0, 0, 0, func_T, func_Q);
+function y0 = build_y0_9_at_trim(P_J, pwm_trim, func_T, func_Q)
+y0 = build_y0_9(P_J, pwm_trim, 0, 0, 0, func_T, func_Q);
 end
 
-function s = unpack_states_17(y)
+function s = unpack_states_9(y)
 s = struct('p', y(:,1), 'q', y(:,2), 'r', y(:,3), ...
            'phi', y(:,4), 'theta', y(:,5), 'psi', y(:,6), ...
            'u', y(:,7), 'v', y(:,8), 'w', y(:,9));
@@ -597,10 +580,15 @@ T_total = sum(T);
 r = [Mx; My; Mz; T_total - T_needed];
 end
 
-function y = simulate_linear(lm, t_vec, pwm, pwm_trim)
-% Simula modelo linear estado-espaço: dx_dot = A·dx + B·du
-%   x = x0 + dx;  u = u0 + du
-du = pwm - pwm_trim;  % perturbação em PWM
+function y = simulate_linear(lm, t_vec, pwm, ~)
+% Simula modelo linear estado-espaço: dx_dot = A·dx + B·dv
+%   x = x0 + dx;  v = [T,M] = v0 + dv  (entrada em FORÇAS, não PWM)
+% Converte PWM → [T,M] via a alocação (forces handle + tabelas). 4o arg
+% (pwm_trim) mantido por compat de assinatura, mas não usado (ref = lm.u0).
+[fT_l, fQ_l] = motor_models();
+dyn_l = vtol_dynamics('get_handles');
+[Tt_l, Mxt_l, Myt_l, Mzt_l] = dyn_l.forces(pwm, lm.P, fT_l, fQ_l);
+dv = [Tt_l, Mxt_l, Myt_l, Mzt_l] - lm.u0(:)';   % perturbação em [T,M]
 N = numel(t_vec); dt = t_vec(2)-t_vec(1);
 nx = size(lm.A, 1);
 
@@ -608,7 +596,7 @@ dx = zeros(N, nx);
 dx(1,:) = 0;
 for k = 1:N-1
     % Euler explícito (simples, suficiente pra perturbações pequenas em janela curta)
-    dx(k+1,:) = dx(k,:) + dt * (lm.A * dx(k,:)' + lm.B * du(k,:)')';
+    dx(k+1,:) = dx(k,:) + dt * (lm.A * dx(k,:)' + lm.B * dv(k,:)')';
 end
 y = dx + lm.x0(:)';  % adiciona x0 do trim
 end
@@ -641,17 +629,8 @@ for nm = {'p_out','q_out','r_out','phi_out','theta_out','psi_out', ...
     assignin('base', nm{1}, z_ts);
 end
 
-T_eff_init = zeros(4,1); Q_eff_init = zeros(4,1);
-for i = 1:4
-    T_eff_init(i) = func_T(pwm(1,i));
-    Q_eff_init(i) = func_Q(pwm(1,i));
-end
-assignin('base', 'T_eff_init', T_eff_init);
-assignin('base', 'Q_eff_init', Q_eff_init);
-
 P_estimated = P_J_to_simulink(P_J); %#ok<NASGU>
 assignin('base', 'P_estimated', P_estimated);
-assignin('base', 'tau_motor', 0.05);   % MotorLag T1..T4, Q1..Q4 lêem isso
 
 simOut = sim(model);
 state  = extract_v4_state(simOut.yout, sub_specs, t_vec);

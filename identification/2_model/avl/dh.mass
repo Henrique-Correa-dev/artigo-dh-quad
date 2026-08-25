@@ -1,0 +1,42 @@
+#  DH (drone hibrido) - arquivo de massa do AVL
+#
+#  ATENCAO: no AVL o .mass e ENTRADA. O AVL NAO calcula inercia a partir da
+#  geometria; ele soma as massas concentradas pelo teorema dos eixos paralelos,
+#  o mesmo que 2_model/inertia_lumped.m faz. Para o a priori de inercia as saidas
+#  sao completar o CAD (hoje 1,072 kg contra 1,993 kg reais) ou o pendulo bifilar.
+#  Este arquivo serve para a analise de modos (MODE) e como conferencia cruzada.
+#
+#  EIXOS: X para tras, Y para a direita, Z para cima (convencao do AVL).
+#  Origem no bordo de ataque da raiz da asa, igual ao dh.avl.
+#  CG resultante deve cair perto de X = 0,075 m (1/3 da corda media).
+#
+#  Massa total: 1,993 kg (pesagem no dia do voo). As POSICOES sao estimativas do
+#  desenho: corrija com as medidas reais antes de usar os resultados.
+#
+Lunit = 1.0    m
+Munit = 1.0    kg
+Tunit = 1.0    s
+
+g     = 9.81
+rho   = 1.225
+
+#  massa      x       y       z        Ixx      Iyy      Izz      Ixy   Ixz   Iyz
+*   1.0      1.0     1.0     1.0       1.0      1.0      1.0      1.0   1.0   1.0
++   0.0      0.0     0.0     0.0       0.0      0.0      0.0      0.0   0.0   0.0
+#
+   0.400    0.075   0.000   0.000     0.0400   0.0040   0.0430   0.0   0.0   0.0  ! asa + fuselagem (estrutura)
+   0.120    0.520   0.000   0.030     0.0020   0.0002   0.0021   0.0   0.0   0.0  ! empenagem em H + hastes
+   0.092   -0.252   0.232   0.050     0.0      0.0      0.0      0.0   0.0   0.0  ! motor 1 (dianteiro direito)
+   0.092   -0.252  -0.232   0.050     0.0      0.0      0.0      0.0   0.0   0.0  ! motor 2 (dianteiro esquerdo)
+   0.092    0.402  -0.232   0.050     0.0      0.0      0.0      0.0   0.0   0.0  ! motor 3 (traseiro esquerdo)
+   0.092    0.402   0.232   0.050     0.0      0.0      0.0      0.0   0.0   0.0  ! motor 4 (traseiro direito)
+   0.131    0.600   0.000   0.000     0.0      0.0      0.0      0.0   0.0   0.0  ! motor pusher + helice
+   0.186    0.025   0.000  -0.030     0.0      0.0      0.0      0.0   0.0   0.0  ! bateria LiPo 3S 2200
+   0.030    0.075   0.000  -0.010     0.0      0.0      0.0      0.0   0.0   0.0  ! Pixhawk + suporte
+   0.021    0.175   0.000   0.080     0.0      0.0      0.0      0.0   0.0   0.0  ! GPS + mastro
+   0.030    0.125   0.000  -0.020     0.0      0.0      0.0      0.0   0.0   0.0  ! receptor + telemetria
+   0.026    0.480   0.000   0.000     0.0      0.0      0.0      0.0   0.0   0.0  ! ESC do pusher
+   0.025   -0.225   0.000   0.020     0.0      0.0      0.0      0.0   0.0   0.0  ! sensor de velocidade (pitot)
+   0.015    0.530   0.000   0.000     0.0      0.0      0.0      0.0   0.0   0.0  ! servos + hastes de comando
+   0.060    0.075   0.000   0.000     0.0      0.0      0.0      0.0   0.0   0.0  ! cabeamento (estimado)
+   0.520    0.075   0.000   0.000     0.0      0.0      0.0      0.0   0.0   0.0  ! FALTANDO no CAD: preencher com a lista real

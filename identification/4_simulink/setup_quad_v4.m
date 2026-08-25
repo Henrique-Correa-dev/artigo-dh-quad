@@ -14,6 +14,7 @@
 %   Lx_r, Lx_l, Ly_f, Ly_r        (braços de momento, via P_J_to_simulink)
 %   r_imu                         (offset CG→IMU, via P_J_to_simulink)
 %   bias_acc                      (bias DC do acelerômetro, via P_J_to_simulink)
+%   motor_pwm_bp, motor_T_N, motor_Q_Nm  (curvas das LUTs do Simulink, via motor_models)
 %
 % Janela e fonte de parâmetros configuráveis abaixo.
 
@@ -24,8 +25,8 @@ paths = setup_paths();
 % ===================================================================
 %  ESCOLHA DA JANELA E FONTE DE PARÂMETROS
 % ===================================================================
-LOG_FILE = '4 25-05-2026 09-31-48.log-132954.mat';   % log a usar
-t_window = [473, 483];                                % [t_start, t_end] em segundos (10s teste rápido)
+LOG_FILE = 'logs_concat.mat';   % log a usar
+t_window = [605, 625];                                % [t_start, t_end] em segundos (10s teste rápido)
 
 % Fonte do P_J:
 %   'p0'      → chute inicial (parameters().P0_J)
@@ -35,15 +36,14 @@ P_SOURCE = 'p_final';
 
 % P_MANUAL (15 elementos — usado se P_SOURCE = 'manual')
 P_MANUAL = [ ...
-    0.072; 0.200; 0.150; 0.000933;    ... % Jx Jy Jz Jxz
-    0.71;  0.71;  0.66;  0.67;         ... % k_T1..4
-    0.79;  0.79;  0.87;  0.86;         ... % k_Q1..4
-    2.27;  1.44;  0.47];                  % Dp Dq Dr
+    0.050326; 0.097063; 0.126192; 0.001571;    ... % Jx Jy Jz Jxz
+    1.06; 1.06; 0.91; 0.93;            ... % k_T1..4
+    0.65; 0.63; 0.75; 0.67;        ... % k_Q1..4
+    5.69; 3.94; 0.74];                 % Dp Dq Dr
 
-% Dinâmica do motor (1ª ordem entre Polyval e K_T no v4):
-%   T_motor(s) = 1/(tau_motor·s + 1)
-%   Pra desabilitar (motor "instantâneo"): tau_motor = 1e-9
-tau_motor = 1e-9;   % matches parameters().tau_motor = 0 — sem lag
+% Atraso modelo×medido no PWM (= identify_plant DELAY_PWM). Alinha slx/.m/linear
+% com a medida (sem isso os 3 sims ADIANTAM ~1 amostra). 0 = desliga.
+DELAY_PWM = 1;
 
 
 %% ===================================================================
@@ -86,6 +86,23 @@ P_estimated = P_J_to_simulink(P_J);
 
 
 %% ===================================================================
+%  2b) Curvas de motor para as LUTs do Simulink (FONTE ÚNICA: .m)
+%      Os 8 Lookup_n-D dos subsistemas Thrust/Torque Model leem
+%      breakpoints+tabela DESTAS variáveis (não mais dados hardcoded),
+%      então o v4 auto-sincroniza com motor_models()/parameters().bench
+%      e não envelhece na próxima troca de motor.
+%
+%      Grid denso (10 µs) "assa" a curva makima do .m: a LUT (Akima
+%      spline + Clip) reproduz o handle do .m com erro desprezível.
+%      k_T/k_Q por motor continuam nos Gains (P_estimated(10:17)).
+%  ===================================================================
+[func_T_lut, func_Q_lut] = motor_models();
+motor_pwm_bp = (1000:10:2000)';            % grid denso de PWM [µs]
+motor_T_N    = func_T_lut(motor_pwm_bp);   % empuxo/motor [N]    (makima do .m)
+motor_Q_Nm   = func_Q_lut(motor_pwm_bp);   % contra-torque/motor [N·m]
+
+
+%% ===================================================================
 %  3) Carregar log e reamostrar na grade comum (dt=0.1s)
 %  ===================================================================
 log_path = fullfile(paths.data, LOG_FILE);
@@ -111,6 +128,12 @@ pwm1 = interp1(L.time_RCOU, L.pwm1_raw, t_common, 'linear');
 pwm2 = interp1(L.time_RCOU, L.pwm2_raw, t_common, 'linear');
 pwm3 = interp1(L.time_RCOU, L.pwm3_raw, t_common, 'linear');
 pwm4 = interp1(L.time_RCOU, L.pwm4_raw, t_common, 'linear');
+
+% Atraso de PWM (= identify_plant). Aplicado AQUI → propaga p/ slx, .m e linear.
+if DELAY_PWM > 0
+    dl = @(x) [repmat(x(1),DELAY_PWM,1); x(1:end-DELAY_PWM)];
+    pwm1=dl(pwm1); pwm2=dl(pwm2); pwm3=dl(pwm3); pwm4=dl(pwm4);
+end
 gyrX = interp1(L.time_IMU, L.gyrX_raw, t_common, 'linear');
 gyrY = interp1(L.time_IMU, L.gyrY_raw, t_common, 'linear');
 gyrZ = interp1(L.time_IMU, L.gyrZ_raw, t_common, 'linear');
@@ -120,21 +143,6 @@ accZ = interp1(L.time_IMU, L.accZ_raw, t_common, 'linear');
 roll_deg  = interp1(L.time_ATT, L.roll_deg,  t_common, 'linear');
 pitch_deg = interp1(L.time_ATT, L.pitch_deg, t_common, 'linear');
 yaw_deg   = interp1(L.time_ATT, L.yaw_deg,   t_common, 'linear');
-
-
-%% ===================================================================
-%  4) Condições iniciais dos State-Space do lag de motor
-%      O estado é a saída do Polyval CRUA (antes do K_T) no instante 0
-%  ===================================================================
-[func_T_ref, func_Q_ref] = motor_models();   % spline igual ao .m e ao .slx
-pwm0_each = [pwm1(find(idx_w,1,'first')), pwm2(find(idx_w,1,'first')), ...
-             pwm3(find(idx_w,1,'first')), pwm4(find(idx_w,1,'first'))];
-T_eff_init = zeros(4,1);
-Q_eff_init = zeros(4,1);
-for i = 1:4
-    T_eff_init(i) = func_T_ref(pwm0_each(i));
-    Q_eff_init(i) = func_Q_ref(pwm0_each(i));
-end
 
 
 %% ===================================================================
@@ -193,7 +201,7 @@ fprintf('  janela [%g, %g] s  (sim t=0 ate %.2f s, %d amostras dt=0.1)\n', ...
         t_window(1), t_window(2), t_sim, sum(idx_w));
 fprintf('  IC: phi0=%.2f° theta0=%.2f° psi0=%.2f°\n', ...
         rad2deg(phi0), rad2deg(theta0), rad2deg(psi0));
-fprintf('  mass=%.4f kg  g=%.4f  tau_motor=%.4f s\n', mass, g_acc, tau_motor);
+fprintf('  mass=%.4f kg  g=%.4f  (motor sem lag)\n', mass, g_acc);
 fprintf('  P_estimated(1:9) = [G1..G8, invJy] = %s\n', mat2str(P_estimated(1:9)', 4));
 fprintf('  k_T = [%s]\n', strjoin(arrayfun(@(x) sprintf('%.3f', x), P_estimated(10:13), 'UniformOutput', false), ', '));
 fprintf('  k_Q = [%s]\n', strjoin(arrayfun(@(x) sprintf('%.3f', x), P_estimated(14:17), 'UniformOutput', false), ', '));

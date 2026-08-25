@@ -1,0 +1,320 @@
+
+	Prerelease License -- for engineering feedback and testing
+	purposes only. Not for sale.
+
+load_log_data: /Users/graest/ita-master/artigo/artigo-dh-quad/identification/1_data/logs_concat.mat (concat de 3 logs) | 749.3s totais
+  >>> motor_chain: atraso 0.10 s (1 amostra) | lag τ_m = 0.050 s | T = kT·RPM²
+  Log "logs_concat.mat": t = 0.1 a 749.1 s (concat)
+
+  Segmentos de treino: 5
+    [1] 4-24s  (200 pontos)
+    [2] 25-41s  (160 pontos)
+    [3] 42-62s  (200 pontos)
+    [4] 63-99s  (360 pontos)
+    [5] 100-125s  (250 pontos)
+  >>> Regularização: λ_kT_pair=1.0e+02  λ_kQ_pair=1.0e+02
+
+==========================================================
+  VALIDAÇÃO DO MODELO COM P0 (chute inicial)
+==========================================================
+
+  --- Constantes do modelo (compare com Simulink) ---
+  Jx=0.043244  Jy=0.084404  Jz=0.126192  Jxz=0.001571
+  gamma0 = 0.005455
+  G1=0.024490  G2=0.967220  G3=23.135059  G4=0.288015
+  G5=0.982750  G6=0.018613  G7=-0.325865  G8=7.928018
+  invJy = 11.847780
+  k_T = [1.0000, 1.0000, 1.0000, 1.0000]
+  k_Q = [1.0000, 1.0000, 1.0000, 1.0000]
+  Dp=1.1900  Dq=1.2000  Dr=0.0800
+  Braços (de parameters.m): Lx_r=0.227500  Lx_l=0.236500  Ly_f=0.331200  Ly_r=0.321800
+
+  --- Estado inicial (t=4.1s) ---
+  PWM = [4672, 4606, 4615, 4661] us
+  T_ref(PWM) = [3.8479, 3.7409, 3.7550, 3.8299] N
+  T_mr (k_T*T_ref) = [3.8479, 3.7409, 3.7550, 3.8299] N
+  Q_mr (k_Q*Q_ref) = [0.109896, 0.106841, 0.107242, 0.109380] N·m
+  Mx=0.026087  My=0.081794  Mz=0.000114  N·m
+  p0=-0.1180  q0=0.1502  r0=-0.1062  rad/s
+  p_dot=0.758942  q_dot=0.801126  r_dot=0.023081  rad/s²
+  -----------------------------------------------
+
+  [P0] Validação (605-625s):
+    R² p=-3.5758 | q=-0.2123 | r=-4.4607
+    R² AccX=0.2961 | AccY=-0.0529 | AccZ=0.7718
+    canal      RMSE     TIC   Theil bias/var/cov
+    p        1.1683   0.618   0.62/0.14/0.24
+    q        0.6452   0.414   0.18/0.29/0.53
+    r        0.4930   0.706   0.54/0.10/0.36
+    accX     0.2361   0.254   0.06/0.03/0.91
+    accY     0.2219   0.420   0.06/0.06/0.88
+    accZ     0.4957   0.025   0.04/0.25/0.72
+
+==========================================================
+  FASE A: EEM rotacional (5 segmentos, 15 params)
+==========================================================
+
+                                            Norm of      First-order 
+ Iteration  Func-count      Resnorm            step       optimality
+     0         14           6263.82                         1.16e+04
+     1         28           1758.78        0.845489              915      
+     2         42           881.105        0.597425              194      
+     3         56           717.999        0.421328             41.9      
+     4         70           689.474        0.278427              6.7      
+     5         84           687.267        0.107227             2.56      
+     6         98           687.217       0.0331495             0.37      
+     7        112           687.173        0.104721            0.336      
+     8        126           687.171       0.0253426            0.073      
+     9        140           687.171      0.00933318           0.0228      
+    10        154           687.171      0.00451821          0.00743      
+    11        168           687.171      0.00282252          0.00703      
+    12        182           687.171      0.00159607          0.00261      
+    13        196           687.171       0.0010129          0.00254      
+    14        210           687.171     0.000585441         0.000957      
+    15        224           687.171     0.000375059          0.00094      
+    16        238           687.171     0.000218464         0.000357      
+    17        252           687.171     0.000140119         0.000351      
+    18        266           687.171      8.1709e-05         0.000134      
+    19        280           687.171     5.25182e-05         0.000132      
+    20        294           687.171     3.08326e-05         5.04e-05      
+    21        308           687.171     1.96517e-05         4.93e-05      
+    22        322           687.171      1.0823e-05         1.77e-05      
+    23        336           687.171     6.51961e-06         1.64e-05      
+    24        350           687.171     3.27188e-06         6.53e-06      
+    25        364           687.171     8.17971e-07          3.8e-05      
+    26        378           687.171     1.63594e-06         4.71e-06      
+    27        392           687.171     8.42423e-07         2.09e-06      
+
+Local minimum possible.
+
+lsqnonlin stopped because the final change in the sum of squares relative to 
+its initial value is less than the value of the function tolerance.
+
+
+  EEM Resnorm: 687.1706  |  Exit flag: 3
+  Breakdown: data=672.2813  reg=14.8893  (reg/data = 2.21%)
+  k_T par: [0.562,0.560] vs [0.547,0.558]   Δ=0.002,-0.011
+  k_Q par: [0.673,0.524] vs [0.858,0.502]   Δ=0.149,0.356
+    Jx    :     0.049969  (chute:     0.043244)
+    Jy    :     0.079482  (chute:     0.084404)
+    Jz    :     0.126192  (chute:     0.126192)
+    Jxz   :     0.001571  (chute:     0.001571)
+    k_T1  :     0.561608  (chute:     1.000000)
+    k_T2  :     0.559759  (chute:     1.000000)
+    k_T3  :     0.547177  (chute:     1.000000)
+    k_T4  :     0.558406  (chute:     1.000000)
+    k_Q1  :     0.673394  (chute:     1.000000)
+    k_Q2  :     0.524240  (chute:     1.000000)
+    k_Q3  :     0.857627  (chute:     1.000000)
+    k_Q4  :     0.501935  (chute:     1.000000)
+    Dp    :     2.412041  (chute:     1.190000)
+    Dq    :     2.188304  (chute:     1.200000)
+    Dr    :     0.646298  (chute:     0.080000)
+
+==========================================================
+  FASE B.1: OEM [1s] (5 segmentos)
+==========================================================
+
+                                            Norm of      First-order 
+ Iteration  Func-count      Resnorm            step       optimality
+     0         14           63848.2                         2.76e+04
+     1         28           11171.6          1.0656         6.44e+03      
+     2         42           3163.52          0.4779         1.26e+03      
+     3         56           2574.82        0.157559              129      
+     4         70           2567.19       0.0205584             2.25      
+     5         84           2567.18     0.000655539            0.038      
+     6         98           2567.18     3.41877e-05          0.00162      
+     7        112           2567.18     3.68834e-06         0.000165      
+     8        126           2567.18      3.8414e-07         1.66e-05      
+
+Local minimum possible.
+
+lsqnonlin stopped because the final change in the sum of squares relative to 
+its initial value is less than the value of the function tolerance.
+
+  [1s] Resnorm: 2567.1847 | Exit: 3
+  [1s] Val R² p=0.7141 | q=0.7328 | r=0.8630 | média=0.7700
+
+==========================================================
+  FASE B.2: OEM [2s] (5 segmentos)
+==========================================================
+
+                                            Norm of      First-order 
+ Iteration  Func-count      Resnorm            step       optimality
+     0         14           2641.03                               92
+     1         28           2637.54        0.130454             3.28      
+     2         42           2637.52       0.0133485            0.776      
+     3         56           2637.52     0.000529041            0.025      
+     4         70           2637.52     2.86098e-05          0.00112      
+     5         84           2637.52     1.88102e-06         6.19e-05      
+     6         98           2637.52      1.3208e-07         6.06e-06      
+
+Local minimum possible.
+
+lsqnonlin stopped because the final change in the sum of squares relative to 
+its initial value is less than the value of the function tolerance.
+
+  [2s] Resnorm: 2637.5190 | Exit: 3
+  [2s] Val R² p=0.7235 | q=0.7389 | r=0.8642 | média=0.7755
+
+==========================================================
+  FASE B.3: OEM [3s] (5 segmentos)
+==========================================================
+
+                                            Norm of      First-order 
+ Iteration  Func-count      Resnorm            step       optimality
+     0         14           2659.16                              188
+     1         28           2657.03       0.0842771             7.01      
+     2         42           2657.01       0.0110917            0.587      
+     3         56           2657.01     0.000516577           0.0124      
+     4         70           2657.01     3.81566e-05          0.00169      
+     5         84           2657.01     2.32316e-06         5.82e-05      
+     6         98           2657.01     1.74673e-07         7.06e-06      
+
+Local minimum possible.
+
+lsqnonlin stopped because the final change in the sum of squares relative to 
+its initial value is less than the value of the function tolerance.
+
+  [3s] Resnorm: 2657.0117 | Exit: 3
+  [3s] Val R² p=0.7155 | q=0.7395 | r=0.8582 | média=0.7711
+
+  >>> Melhor estágio: [2s] com R² médio = 0.7755
+
+  --- Parâmetros Finais ---
+    Jx    :     0.047460  (EEM:     0.049969)  (P0:     0.043244)
+    Jy    :     0.093899  (EEM:     0.079482)  (P0:     0.084404)
+    Jz    :     0.126192  (EEM:     0.126192)  (P0:     0.126192)
+    Jxz   :     0.001571  (EEM:     0.001571)  (P0:     0.001571)
+    k_T1  :     1.059791  (EEM:     0.561608)  (P0:     1.000000)
+    k_T2  :     1.054951  (EEM:     0.559759)  (P0:     1.000000)
+    k_T3  :     1.050910  (EEM:     0.547177)  (P0:     1.000000)
+    k_T4  :     1.071452  (EEM:     0.558406)  (P0:     1.000000)
+    k_Q1  :     0.666119  (EEM:     0.673394)  (P0:     1.000000)
+    k_Q2  :     0.624830  (EEM:     0.524240)  (P0:     1.000000)
+    k_Q3  :     0.771744  (EEM:     0.857627)  (P0:     1.000000)
+    k_Q4  :     0.684277  (EEM:     0.501935)  (P0:     1.000000)
+    Dp    :     5.499698  (EEM:     2.412041)  (P0:     1.190000)
+    Dq    :     3.860643  (EEM:     2.188304)  (P0:     1.200000)
+    Dr    :     0.776912  (EEM:     0.646298)  (P0:     0.080000)
+
+  --- Constantes G (derivadas das inércias) ---
+    G1=  0.0209  G2=  0.6811  G3= 21.0793  G4=  0.2624
+    G5=  0.8385  G6=  0.0167  G7= -0.3677  G8=  7.9277  InvJy= 10.6498
+
+  --- Qualidade dos parâmetros (erro-padrão ≈ Cramér-Rao) ---
+  param         valor          std     std%%   obs
+  Jx         0.047460     0.001362      2.9%   [CRB ok]
+  Jy         0.093899     0.002447      2.6%   [CRB ok]
+  Jz         0.126192     0.024664     19.5%   [no UB]
+  Jxz        0.001571     0.000648     41.2%   [no UB]
+  k_T1       1.059791     0.008058      0.8%   [CRB ok]
+  k_T2       1.054951     0.008087      0.8%   [CRB ok]
+  k_T3       1.050910     0.009290      0.9%   [CRB ok]
+  k_T4       1.071452     0.008830      0.8%   [CRB ok]
+  k_Q1       0.666119     0.128634     19.3%   [CRB ok]
+  k_Q2       0.624830     0.130008     20.8%   [CRB>20%% — Sato FALHA]
+  k_Q3       0.771744     0.145556     18.9%   [CRB ok]
+  k_Q4       0.684277     0.144301     21.1%   [CRB>20%% — Sato FALHA]
+  Dp         5.499698     0.220490      4.0%   [CRB ok]
+  Dq         3.860643     0.154681      4.0%   [CRB ok]
+  Dr         0.776912     0.031908      4.1%   [CRB ok]
+  (Sato: CRB<20% = bem identificado. std% alto/"no LB/UB" = pouco
+   observável — tipicamente yaw→Jz/k_Q/Jxz/Dr)
+
+  --- Viabilidade física (desigualdade triangular) ---
+   Jz<=Jx+Jy    0.1262 <= 0.1414   folga +12.0%   OK
+   Jy<=Jx+Jz    0.0939 <= 0.1737   folga +84.9%   OK
+   Jx<=Jy+Jz    0.0475 <= 0.2201   folga +363.7%   OK
+
+  Parâmetros exportados para: /Users/graest/ita-master/artigo/artigo-dh-quad/identification/outputs/P_identified.mat
+
+==========================================================
+  VALIDAÇÃO COM P_final (Rot + Trans separados)
+==========================================================
+  [P_final] Validação (605-625s):
+    R² p=0.7235 | q=0.7389 | r=0.8642
+    R² AccX=0.3950 | AccY=0.3389 | AccZ=0.4943
+    canal      RMSE     TIC   Theil bias/var/cov
+    p        0.2872   0.261   0.13/0.00/0.87
+    q        0.2994   0.254   0.03/0.00/0.97
+    r        0.0778   0.191   0.02/0.20/0.78
+    accX     0.2189   0.269   0.00/0.45/0.55
+    accY     0.1758   0.342   0.00/0.73/0.26
+    accZ     0.7380   0.037   0.43/0.11/0.46
+
+  --- Torques (validação) | CG fixo do CAD ---
+    Braços: Lx_r=0.2275 Lx_l=0.2365 Ly_f=0.3312 Ly_r=0.3218
+    Mx: min=-1.2281  max=1.0790  std=0.2161
+    My: min=-2.1472  max=1.6469  std=0.3583
+    Mz: min=-0.0978  max=0.0498  std=0.0288
+
+  --- Forças (validação) ---
+    T_total: média=21.148 N  (mg=19.551 N, ratio=1.0817)
+    Ti médios: [5.46, 5.49, 4.94, 5.26] N
+    T_ref cru (sem k_T): [5.15, 5.20, 4.70, 4.91] N  (total=19.96)
+    PWM médios: [5397, 5422, 5150, 5265] us
+    PWM std:    [302.9, 314.6, 348.5, 375.7] us
+    Fz/m média=-0.9502  (esperado ~0 em hover: -T/m+gz ~0)
+    Xu_m=0.0000  Yv_m=0.0000  Zw_m=0.0000  Bz=0.0000
+
+  --- Análise de assimetria PWM ---
+    Coeficiente de variação PWM: [5.6%, 5.8%, 6.8%, 7.1%]
+    (CV baixo = patamar constante → diferença CG/motor)
+    (CV alto  = variação temporal → vento/perturbação)
+    Assimetria roll (dir-esq): média=90.3 us  std=472.8 us
+    Assimetria pitch (frente-trás): média=-141.0 us  std=571.7 us
+    Assimetria yaw (CW-CCW): média=404.1 us  std=788.6 us
+    → Assimetrias VARIÁVEIS: predomina vento / perturbação externa
+
+==========================================================
+  VALIDAÇÃO SEMI-ACOPLADA (att medida + RK4 translacional)
+==========================================================
+  [P_final (semi-acoplado)] Validação (605-625s):
+    R² p=1.0000 | q=1.0000 | r=1.0000
+    R² AccX=0.6281 | AccY=0.4117 | AccZ=0.5323
+    canal      RMSE     TIC   Theil bias/var/cov
+    p        0.0000   0.000   0.00/0.00/-0.00
+    q        0.0000   0.000   0.00/0.00/0.00
+    r        0.0000   0.000   0.00/0.00/-0.00
+    accX     0.1716   0.210   0.01/0.69/0.31
+    accY     0.1659   0.321   0.01/0.68/0.31
+    accZ     0.7097   0.035   0.47/0.09/0.44
+
+==========================================================
+  VALIDAÇÃO HÍBRIDA (pqr integrado + att medida)
+==========================================================
+  [P_final (hibrido)] Validação (605-625s):
+    R² p=0.6280 | q=0.6982 | r=0.8720
+    R² AccX=0.3370 | AccY=0.2911 | AccZ=0.5023
+    canal      RMSE     TIC   Theil bias/var/cov
+    p        0.3331   0.297   0.09/0.00/0.90
+    q        0.3219   0.269   0.02/0.01/0.97
+    r        0.0755   0.186   0.01/0.20/0.78
+    accX     0.2292   0.279   0.00/0.36/0.64
+    accY     0.1821   0.353   0.00/0.64/0.35
+    accZ     0.7321   0.037   0.44/0.11/0.45
+
+--- Teste de brancura do resíduo (taxas, híbrido) ---
+  p  :  67% dos lags dentro de ±0.139 (95%)  → COLORIDO (sobra dinâmica)
+  q  :  63% dos lags dentro de ±0.139 (95%)  → COLORIDO (sobra dinâmica)
+  r  :  13% dos lags dentro de ±0.139 (95%)  → COLORIDO (sobra dinâmica)
+  (≥90% dentro da banda ≈ branco. Figura: /Users/graest/ita-master/artigo/artigo-dh-quad/identification/outputs/images/identify_plant_whiteness.png)
+
+==========================================================
+  RESUMO FINAL — Validação (605-625s)
+==========================================================
+  [P0] Chute Inicial:
+    R² p=-3.5758 | q=-0.2123 | r=-4.4607
+    R² AccX=0.2961 | AccY=-0.0529 | AccZ=0.7718
+  [P_final] Após Otimização:
+    R² p=0.7235 | q=0.7389 | r=0.8642
+    R² AccX=0.3950 | AccY=0.3389 | AccZ=0.4943
+
+  --- Semi-acoplado (att medida + RK4 translacional) ---
+  [P0] Chute Inicial:
+    R² AccX=0.6281 | AccY=0.4117 | AccZ=0.7439
+  [P_final] Após Otimização:
+    R² AccX=0.6281 | AccY=0.4117 | AccZ=0.5323
+==========================================================
+Script finalizado.
