@@ -280,6 +280,7 @@ REG_LAMBDA.kq_pair = 100;   % penaliza |k_Q1-k_Q2| e |k_Q3-k_Q4|
 %   (Jz≤Jx+Jy, Jy≤Jx+Jz, Jx≤Jy+Jz). One-sided: só pune violação.
 %   Necessária porque a folga triangular do CAD é ~1.2% e yaw é inobservável.
 REG_LAMBDA.tri = 1e4;       % grande → optimizer nunca sai do físico
+if isfield(CFG,'tri_lambda'), REG_LAMBDA.tri = CFG.tri_lambda; fprintf('  >>> tri_lambda (CFG): %.1e\n', REG_LAMBDA.tri); end
 
 % Modo do custo (quais sinais no resíduo):
 %   'rotational' → só p,q,r (k_T solto em magnitude → AccZ diverge ~20% no hover)

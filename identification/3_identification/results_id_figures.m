@@ -22,25 +22,27 @@ paths = setup_paths();
 %% ---------------- CONFIG ----------------
 LOG_FILE = 'logs_concat.mat';
 dt = 0.1;  DELAY_PWM = 1;
-T_VAL = [605 625];
+T_VAL = [610 630];   % janela de validacao oficial (= identify_plant)
 CAP5  = '/Users/graest/ita-master/artigo/artigo-dh-quad/dissertacao/Cap5';
 
 proj = parameters();
 tau_lag   = proj.motor.tau_m;
 constants = struct('m', proj.m, 'g', proj.g);
 
-%% ---------------- VETORES DE PARÂMETROS ----------------
-P0    = proj.P0_J(:);
-P_eem = [0.052632;0.080390;0.126192;0.001571; ...
-         0.502746;0.501248;0.488283;0.498264; ...
-         0.661432;0.520601;0.849461;0.492273; ...
-         1.625031;1.504501;0.583111];                  % Fase A da rodada identify_plant
-% P_final TRAVADO (resultado físico Jz=0.126). O P_identified.mat no disco está
-% com o teste LIBERADO (Jz=0.141) — re-rode o identify_plant p/ restaurá-lo.
-P_oem = [0.046912;0.093374;0.126192;0.001571; ...
-         1.058541;1.053129;1.052406;1.072711; ...
-         0.671552;0.628359;0.778012;0.688072; ...
-         6.849797;4.678919;0.813959];
+%% ---------------- VETORES DE PARÂMETROS (rodada oficial_2026_teo) ----------------
+SS = load(fullfile(paths.outputs,'runs','oficial_2026_teo','summary.mat'));
+P0    = SS.summary.P0(:);
+P_eem = SS.summary.P_eem(:);
+P_oem = SS.summary.P_final(:);
+
+% velocidade estimada p/ os termos aerodinamicos fixos (mesma serie do estimador)
+Lv = load_log_data(fullfile(paths.data, LOG_FILE));
+t0v = max([min(Lv.time_IMU), min(Lv.time_ATT), min(Lv.time_RCOU)]);
+t1v = min([max(Lv.time_IMU), max(Lv.time_ATT), max(Lv.time_RCOU)]);
+tcv = (t0v:dt:t1v)';
+VEv = estimate_velocity(Lv, tcv);
+Vg=VEv.V; vg=VEv.v; wg=VEv.w; Vg(~isfinite(Vg))=0; vg(~isfinite(vg))=0; wg(~isfinite(wg))=0;
+setappdata(0,'aero_vel',struct('t',tcv,'V',Vg,'v',vg,'w',wg));
 
 %% ---------------- HISTÓRICOS DE CUSTO (rodada identify_plant) ----------------
 eem_cost = [6162.55 2245.99 918.701 661.953 607.713 599.954 599.5 599.495 ...
@@ -78,7 +80,7 @@ lab  = {'p [rad/s]','q [rad/s]','r [rad/s]','a_x [m/s^2]','a_y [m/s^2]','a_z [m/
 sig  = @(R) {R.p,R.q,R.r,R.accX,R.accY,R.accZ};
 prnt = @(tag,R) fprintf('  %-4s %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f\n', tag, ...
     R2(MEAS{1},R.p),R2(MEAS{2},R.q),R2(MEAS{3},R.r),R2(MEAS{4},R.accX),R2(MEAS{5},R.accY),R2(MEAS{6},R.accZ));
-fprintf('\n  R^2 (validacao 605-625 s):\n         p       q       r      ax      ay      az\n');
+fprintf('\n  R^2 (validacao 610-630 s):\n         p       q       r      ax      ay      az\n');
 prnt('P0',r0); prnt('EEM',re); prnt('OEM',ro);
 
 % --- metricas de validacao por modelo (R2, TIC, decomposicao de Theil) ---
@@ -169,52 +171,33 @@ lg4 = legend(hL4, {'medido','\Theta_0','\Theta_{EEM}','\Theta_{OEM}'}, 'Orientat
 lg4.Layout.Tile = 'south';
 exportgraphics(f4, fullfile(paths.images,'id_sim_comp.png'), 'BackgroundColor','white', 'Resolution',200);
 
-%% ---------------- FIG 5: VELOCIDADES ANGULARES (estilo empilhado por canal) ----------------
-%  Mesmo conteúdo da comparação (P0/EEM/OEM), porém no layout do artigo: três
-%  linhas empilhadas (p, q, r), cada uma em largura cheia, com R^2 no título.
-%  tiledlayout garante o espaço dos títulos de cada subplot.
-f5 = figure('Position',[40 40 940 820]); set(f5,'Color','w','DefaultAxesFontSize',FS1); try, f5.Theme='light'; catch, end
-tl5 = tiledlayout(f5,3,1,'TileSpacing','compact','Padding','compact');
-rlab = {'p [rad/s]','q [rad/s]','r [rad/s]'};  hL5 = [];
-for i=1:3
+%% ---------------- FIG 5: GRADE 3x2 (p,q,r,ax,ay,az) — estilo val_aero ----------------
+%  Um unico painel 3x2 com os seis canais, R^2 dos tres modelos em caixa no topo
+%  de cada subplot e legenda unica na base (leitura melhor que os empilhados).
+f5 = figure('Position',[40 40 1040 900]); set(f5,'Color','w','DefaultAxesFontSize',FS1); try, f5.Theme='light'; catch, end
+tl5 = tiledlayout(f5,3,2,'TileSpacing','compact','Padding','compact');
+lab6 = {'p [rad/s]','q [rad/s]','r [rad/s]','a_x [m/s^2]','a_y [m/s^2]','a_z [m/s^2]'};
+hL5 = [];
+for k=1:6
     ax = nexttile(tl5); hold(ax,'on'); grid(ax,'on'); box(ax,'on');
-    h1=plot(ax, time, MEAS{i}, ST_MEAS, 'Color',C_MEAS, 'LineWidth',LW_MEAS);
-    h2=plot(ax, time, s0{i},   ST_P0,   'Color',C_P0,   'LineWidth',LW_P0);
-    h3=plot(ax, time, se{i},   ST_EEM,  'Color',C_EEM,  'LineWidth',LW_EEM);
-    h4=plot(ax, time, so{i},   ST_OEM,  'Color',C_OEM,  'LineWidth',LW_OEM);
-    if i==1, hL5=[h1 h2 h3 h4]; end
-    ylabel(ax, rlab{i});  xlim(ax,[time(1) time(end)]);
-    text(ax, 0.011, 0.95, sprintf('%s   R^2:   \\Theta_0 = %.2f     \\Theta_{EEM} = %.2f     \\Theta_{OEM} = %.2f', sub{i}, ...
-        R2(MEAS{i},s0{i}), R2(MEAS{i},se{i}), R2(MEAS{i},so{i})), ...
-        'Units','normalized','VerticalAlignment','top','FontSize',FS1-1,'FontWeight','bold','BackgroundColor','w','EdgeColor',[.8 .8 .8],'Margin',3);
-    if i==3, xlabel(ax,'t [s]'); end
-end
-lg5 = legend(hL5,{'medido','\Theta_0','\Theta_{EEM}','\Theta_{OEM}'},'Orientation','horizontal','FontSize',FS1);  lg5.Layout.Tile='south';
-exportgraphics(f5, fullfile(paths.images,'id_comp_rates.png'), 'BackgroundColor','white', 'Resolution',200);
-
-%% ---------------- FIG 6: ACELERAÇÕES (estilo empilhado por canal) ----------------
-f6 = figure('Position',[40 40 940 820]); set(f6,'Color','w','DefaultAxesFontSize',FS1); try, f6.Theme='light'; catch, end
-tl6 = tiledlayout(f6,3,1,'TileSpacing','compact','Padding','compact');
-albl = {'a_x [m/s^2]','a_y [m/s^2]','a_z [m/s^2]'};  hL6 = [];
-for i=1:3
-    k = i+3;
-    ax = nexttile(tl6); hold(ax,'on'); grid(ax,'on'); box(ax,'on');
-    h1=plot(ax, time, MEAS{k}, ST_MEAS, 'Color',C_MEAS, 'LineWidth',LW_MEAS);
-    h2=plot(ax, time, s0{k},   ST_P0,   'Color',C_P0,   'LineWidth',LW_P0);
-    h3=plot(ax, time, se{k},   ST_EEM,  'Color',C_EEM,  'LineWidth',LW_EEM);
-    h4=plot(ax, time, so{k},   ST_OEM,  'Color',C_OEM,  'LineWidth',LW_OEM);
-    if i==1, hL6=[h1 h2 h3 h4]; end
-    ylabel(ax, albl{i});  xlim(ax,[time(1) time(end)]);  ylim(ax, ylac{i});
-    text(ax, 0.011, 0.95, sprintf('%s   R^2:   \\Theta_0 = %.2f     \\Theta_{EEM} = %.2f     \\Theta_{OEM} = %.2f', sub{i}, ...
+    h1=plot(ax, time, MEAS{k}, ST_MEAS, 'Color',C_MEAS, 'LineWidth',1.1);
+    h2=plot(ax, time, s0{k},   ST_P0,   'Color',C_P0,   'LineWidth',1.8);
+    h3=plot(ax, time, se{k},   ST_EEM,  'Color',C_EEM,  'LineWidth',1.6);
+    h4=plot(ax, time, so{k},   ST_OEM,  'Color',C_OEM,  'LineWidth',2.4);
+    if k==1, hL5=[h1 h2 h3 h4]; end
+    ylabel(ax, lab6{k});  xlim(ax,[time(1) time(end)]);
+    if k>=4, ylim(ax, ylac{k-3}); end
+    text(ax, 0.03, 1.10, sprintf('R^2:  \\Theta_0 = %.2f   \\Theta_{EEM} = %.2f   {\\color[rgb]{0.85,0.37,0.01}\\Theta_{OEM} = %.2f}', ...
         R2(MEAS{k},s0{k}), R2(MEAS{k},se{k}), R2(MEAS{k},so{k})), ...
-        'Units','normalized','VerticalAlignment','top','FontSize',FS1-1,'FontWeight','bold','BackgroundColor','w','EdgeColor',[.8 .8 .8],'Margin',3);
-    if i==3, xlabel(ax,'t [s]'); end
+        'Units','normalized','VerticalAlignment','top','FontSize',FS1+1,'FontWeight','bold', ...
+        'BackgroundColor','w','EdgeColor',[.6 .6 .6],'Margin',3);
+    if k>=5, xlabel(ax,'t [s]'); end
 end
-lg6 = legend(hL6,{'medido','\Theta_0','\Theta_{EEM}','\Theta_{OEM}'},'Orientation','horizontal','FontSize',FS1);  lg6.Layout.Tile='south';
-exportgraphics(f6, fullfile(paths.images,'id_comp_acc.png'), 'BackgroundColor','white', 'Resolution',200);
+lg5 = legend(hL5,{'medido','\Theta_0','\Theta_{EEM}','\Theta_{OEM}'},'Orientation','horizontal','FontSize',FS1+2);  lg5.Layout.Tile='south';
+exportgraphics(f5, fullfile(paths.images,'id_comp_all.png'), 'BackgroundColor','white', 'Resolution',200);
 
 %% ---------------- COPIAR PARA Cap5 ----------------
-for f = {'id_sim_p0','id_cost_eem','id_cost_oem','id_sim_comp','id_comp_rates','id_comp_acc'}
+for f = {'id_sim_p0','id_cost_eem','id_cost_oem','id_sim_comp','id_comp_all'}
     copyfile(fullfile(paths.images,[f{1} '.png']), fullfile(CAP5,[f{1} '.png']));
 end
 fprintf('\n  6 figuras salvas e copiadas para Cap5/.\n');

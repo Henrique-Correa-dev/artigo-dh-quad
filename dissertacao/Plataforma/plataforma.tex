@@ -1,4 +1,4 @@
-Este capítulo descreve a plataforma física empregada no trabalho e a instrumentação responsável pela aquisição dos dados de voo. Abordam-se a aeronave e sua geometria, o sistema de propulsão e a aviônica embarcada.
+Este capítulo descreve a plataforma física empregada no trabalho e a instrumentação responsável pela aquisição dos dados de voo, abordando a aeronave e sua geometria, o sistema de propulsão e a aviônica embarcada. {\color{blue}Em seguida, apresenta a metodologia de identificação adotada, formulando o problema nas classes de caixa branca, cinza e preta, tratando da identificação de sistemas instáveis em malha fechada e revendo os métodos de estimação empregados na prática aeronáutica. A execução dessa metodologia sobre o drone híbrido é detalhada no Capítulo~\ref{chap:identificacao}.}
 
 \section{Plataforma do drone híbrido}
 
@@ -53,7 +53,7 @@ Receptor GPS           & u-blox geração M8 \\
     \label{fig:geometria-plataforma}
 \end{figure}
 
-Partindo da estrutura da matriz de alocação{\color{blue}, deduzida no Capítulo~\ref{chap:modelagem},} e substituindo as distâncias da Figura~\ref{fig:sim-braco} ($L_{x_l}=L_{x_r}=0{,}232$~m, $L_{y_f}=0{,}330$~m e $L_{y_r}=0{,}323$~m) e a razão entre os coeficientes de bancada ${c_M}/{c_T}=0{,}0286$~m (Apêndice~\ref{ap:bancada}), obtém-se a matriz de alocação inicial $\mathbf{B_0}$, que assume a forma numérica
+Partindo da estrutura da matriz de alocação{\color{blue}, deduzida no Capítulo~\ref{chap:modelagem},} e substituindo as distâncias da Figura~\ref{fig:sim-braco} ($L_{x_l}=L_{x_r}=0{,}232$~m, $L_{y_f}=0{,}330$~m e $L_{y_r}=0{,}323$~m) e a razão entre os coeficientes de bancada $c_M/c_T=0{,}0286$~m (Apêndice~\ref{ap:bancada}), obtém-se a matriz de alocação inicial $\mathbf{B_0}$, que assume a forma numérica
 \begin{equation}
 \mathbf{B_0}=
 \begin{bmatrix}
@@ -73,7 +73,7 @@ A Figura \ref{fig:imu-offset} apresenta a medida das distâncias em relação ao
 
 \subsection{Motor}
 
-A sustentação em modo multirrotor é provida por quatro motores \textit{brushless} SunnySky A2212, de constante de velocidade $1000$~kV, cada um acoplado a uma hélice de $10$ polegadas. O motor converte a potência elétrica fornecida pela bateria, por meio do ESC, em rotação, que a hélice transforma em empuxo e contra-torque. A relação entre o comando, a rotação, o empuxo e o contra-torque, com os coeficientes $C_R$, $\Omega_b$, $c_T$ e $c_M$, foi levantada em ensaios estáticos de bancada, descritos no Apêndice~\ref{ap:bancada}, e fornece os valores iniciais do modelo de propulsão do Capítulo~\ref{chap:modelagem}. O motor propulsor (\textit{pusher}) de cauda, responsável pelo voo de avanço em modo asa fixa, não integra o escopo deste trabalho.
+A sustentação em modo multirrotor é provida por quatro motores \textit{brushless} SunnySky A2212, de constante de velocidade $1000$~kV, cada um acoplado a uma hélice \textit{slow flyer} 1045, de $10$ polegadas de diâmetro e $4{,}5$ de passo, {\color{blue}a mesma empregada na caracterização da plataforma por \textcite{DeLucena2025}}. O motor converte a potência elétrica fornecida pela bateria, por meio do ESC, em rotação, que a hélice transforma em empuxo e contra-torque. A relação entre o comando, a rotação, o empuxo e o contra-torque, com os coeficientes $C_R$, $\Omega_b$, $c_T$ e $c_M$, foi levantada em ensaios estáticos de bancada, descritos no Apêndice~\ref{ap:bancada}, e fornece os valores iniciais do modelo de propulsão do Capítulo~\ref{chap:modelagem}. O motor propulsor (\textit{pusher}) de cauda, responsável pelo voo de avanço em modo asa fixa, não integra o escopo deste trabalho.
 
 \begin{figure}[ht]
     \centering

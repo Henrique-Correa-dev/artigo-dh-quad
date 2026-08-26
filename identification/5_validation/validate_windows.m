@@ -15,8 +15,8 @@ function T = validate_windows(varargin)
 
     % Comparação: sem asa (L_p absorve tudo) × oficial (asa separada), cada um
     % com o seu Θ₀ e o seu identificado. P0 é lido do próprio arquivo de cada rodada.
-    f_noaero = fullfile(paths.outputs,'runs','moment_win6_2026','P_identified.mat');
-    f_ofic   = fullfile(paths.outputs,'runs','oficial_2026_final','P_identified.mat');
+    f_noaero = fullfile(paths.outputs,'runs','oficial_2026_teo_noaero','P_identified.mat');
+    f_ofic   = fullfile(paths.outputs,'runs','oficial_2026_teo','P_identified.mat');
     C = struct('nome', {'SEM ASA: Θ₀','SEM ASA: identificado','OFICIAL: Θ₀','OFICIAL: identificado'}, ...
                'file', {f_noaero, f_noaero, f_ofic, f_ofic}, 'use_P0', {true,false,true,false}, ...
                'form', {'moment','moment','moment','moment'}, 'hu', {false,false,false,false}, ...

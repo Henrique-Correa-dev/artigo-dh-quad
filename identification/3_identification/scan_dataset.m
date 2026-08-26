@@ -3,7 +3,7 @@
 % Campanha COMPLETA em quatro sinais — RCIN | PWM | taxas | ACELERÔMETRO — com
 % as janelas escolhidas destacadas, rotuladas e separadas por linhas pontilhadas:
 %   verde  = TREINO    (eixos isolados):     DT1 0-40, DT2 40-80, DT3 80-125
-%   laranja= VALIDAÇÃO (movimento composto): DT4 450-470, DT5 605-625
+%   laranja= VALIDAÇÃO (movimento composto): DT4 450-470, DT5 610-630 (janela principal)
 % Só diagnóstico — não modifica nada.  Uso:  >> scan_dataset
 
 clear; clc; close all;
@@ -15,7 +15,7 @@ LOG_FILE = 'logs_concat.mat';
 dt = 0.1;
 
 % Todas as janelas em ordem cronológica; ISVAL marca as de validação.
-WINS  = [  0  40;  40  80;  80 125; 450 470; 605 625];
+WINS  = [  0  40;  40  80;  80 125; 450 470; 610 630];
 ISVAL = logical([0 0 0 1 1]);
 LBL   = {'\DeltaT_1','\DeltaT_2','\DeltaT_3','\DeltaT_4','\DeltaT_5'};
 
