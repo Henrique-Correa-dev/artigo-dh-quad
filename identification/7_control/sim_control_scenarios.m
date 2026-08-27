@@ -23,8 +23,11 @@ M=struct('A',lm.A,'B',lm.B,'u0',lm.u0,'P',lm.P,'K',G.K,'dyn',dyn, ...
          'bridge',forces_to_pwm(lm,'nonlinear'),'fT',fT,'fQ',fQ, ...
          'constants',struct('m',proj.m,'g',proj.g),'dt',0.01,'PWM_LIM',[1200 2000]);
 
-T_end=10; t=(0:M.dt:T_end)'; h0=3;
+T_end=30; t=(0:M.dt:T_end)'; h0=3;
 % três níveis: u_amp = 5α (m/s),  yaw_rate = 50α (°/s)
+% o spin de guinada é encerrado em T_SPIN: sem o forçamento que gira com o
+% heading, a aeronave converge ao pairado no restante da janela
+T_SPIN=15;
 alpha=[0.25 0.55 0.90];
 tag ={'s1_igual','s2_pouco','s3_muito'};
 ttl ={'S1 — manobra suave (estável e igual)', ...
@@ -39,7 +42,7 @@ for i=1:3
     s=struct('name',tag{i},'h0',h0,'t',t, ...
         'sp_h',h0*ones(size(t)), ...
         'sp_u',5*a*((t>=3)&(t<7)), ...
-        'sp_psi',deg2rad(50*a)*t);
+        'sp_psi',deg2rad(50*a)*min(t,T_SPIN));
     RL=cl_loop(false,s,M);  RN=cl_loop(true,s,M);
 
     dh =max(abs(RL.H-RN.H));
@@ -67,7 +70,7 @@ function plot_scenario(tag, ttl, s, RL, RN, M, paths)
     plot(t,s.sp_h,'--','Color',amber,'LineWidth',1.7,'DisplayName','setpoint');
     plot(t,RL.H,'-','Color',graymed,'LineWidth',1.9,'DisplayName','linear');
     plot(t,RN.H,'-','Color',blue,'LineWidth',1.3,'DisplayName','não-linear');
-    ylabel('Altitude h (m)'); ylim([1.3 3.3]); legend('Location','best'); title('Altitude (saída)');
+    ylabel('Altitude h (m)'); ylim([1.2 4.6]); legend('Location','best'); title('Altitude (saída)');
 
     subplot(2,3,2); hold on; grid on;
     plot(t,s.sp_u,'--','Color',amber,'LineWidth',1.7,'DisplayName','setpoint');
@@ -79,14 +82,14 @@ function plot_scenario(tag, ttl, s, RL, RN, M, paths)
     plot(t,rad2deg(s.sp_psi),'--','Color',amber,'LineWidth',1.7,'DisplayName','setpoint');
     plot(t,rad2deg(RL.X(:,6)),'-','Color',graymed,'LineWidth',1.9,'DisplayName','linear');
     plot(t,rad2deg(RN.X(:,6)),'-','Color',blue,'LineWidth',1.3,'DisplayName','não-linear');
-    ylabel('Guinada \psi (°)'); ylim([0 470]); legend('Location','best'); title('Guinada (saída)');
+    ylabel('Guinada \psi (°)'); ylim([0 1000]); legend('Location','best'); title('Guinada (saída)');
 
     % ---- ROLAGEM (acoplamento, sp=0) + ENTRADAS: momentos, PWM ----
     subplot(2,3,4); hold on; grid on;
     plot(t,rad2deg(RL.X(:,4)),'-','Color',graymed,'LineWidth',1.9,'DisplayName','linear');
     plot(t,rad2deg(RN.X(:,4)),'-','Color',blue,'LineWidth',1.3,'DisplayName','não-linear');
     yline(0,':','Color',[.7 .7 .7],'HandleVisibility','off');
-    ylabel('Rolagem \phi (°)'); ylim([-20 6]); xlabel('t (s)'); legend('Location','best');
+    ylabel('Rolagem \phi (°)'); ylim([-20 14]); xlabel('t (s)'); legend('Location','best');
     title('Rolagem — setpoint \phi=0 (acoplamento)');
 
     subplot(2,3,5); hold on; grid on;

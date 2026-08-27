@@ -1,4 +1,4 @@
-Este apêndice apresenta a linearização do modelo não linear deduzido no Capítulo~2, que fundamenta o projeto de controle do Capítulo~5. O modelo não linear representa fielmente a dinâmica, mas dificulta a aplicação das técnicas de controle clássico adotadas neste trabalho. Por isso, lineariza-se o modelo em torno de um ponto de equilíbrio, obtendo uma representação em espaço de estados válida para pequenas perturbações \cite{Beard2012}, sobre a qual as malhas de controle são sintetizadas. Reunindo os estados do corpo rígido no vetor:
+Este apêndice apresenta a linearização do modelo não linear deduzido no Capítulo~\ref{chap:modelagem}, que fundamenta o projeto de controle do Capítulo~\ref{chap:resultados}. O modelo não linear representa fielmente a dinâmica, mas dificulta a aplicação das técnicas de controle clássico adotadas neste trabalho. Por isso, lineariza-se o modelo em torno de um ponto de equilíbrio, obtendo uma representação em espaço de estados válida para pequenas perturbações \cite{Beard2012}, sobre a qual as malhas de controle são sintetizadas. Reunindo os estados do corpo rígido no vetor:
 \begin{equation}
   \mathbf{x} = [\,p\ \ q\ \ r\ \ \phi\ \ \theta\ \ \psi\ \ u\ \ v\ \ w\,]^{\mathsf{T}}
 \end{equation}
@@ -24,15 +24,15 @@ em que as matrizes de estado $\mathbf{A}$ e de entrada $\mathbf{B}$ são os jaco
     \label{eq:jacobianos}
 \end{equation}
 
-Como o modelo de corpo rígido é linear nas entradas $T$, $\tau_x$, $\tau_y$ e $\tau_z$, a matriz $\mathbf{B}$ é constante, independente do ponto de operação. Como o modelo é diferenciável, os jacobianos são obtidos analiticamente, avaliados no voo pairado assumem a forma fechada das Equações \eqref{eq:matrix-A} e \eqref{eq:matrix-B}.
+Como o modelo de corpo rígido é linear nas entradas $T$, $\tau_x$, $\tau_y$ e $\tau_z$, a matriz $\mathbf{B}$ é constante, independente do ponto de operação. {\color{blue}Como o modelo é diferenciável, os jacobianos são obtidos analiticamente.}
 
 Avaliados no ponto de equilíbrio de voo pairado, no qual $\phi=\theta=0$ (e, portanto, $s_\phi=s_\theta=0$ e $c_\phi=c_\theta=1$) e todas as velocidades são nulas, de modo que os termos giroscópicos e de Coriolis se anulam, os jacobianos assumem a forma:
 \begin{equation}
     \mathbf{A} =
     \begin{bmatrix}
-        -c_p & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & -c_q & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & -c_r & 0 & 0 & 0 & 0 & 0 & 0 \\
+        -\Gamma_3 L_p & 0 & -\Gamma_4 N_r & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & -M_q/J_y & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        -\Gamma_4 L_p & 0 & -\Gamma_8 N_r & 0 & 0 & 0 & 0 & 0 & 0 \\
         1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
         0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
         0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
@@ -58,4 +58,37 @@ Avaliados no ponto de equilíbrio de voo pairado, no qual $\phi=\theta=0$ (e, po
     \label{eq:matrix-B}
 \end{equation}
 
-A estrutura dessas matrizes evidencia o desacoplamento característico do voo pairado. Na matriz $\mathbf{A}$, as linhas da cinemática mapeiam diretamente as velocidades angulares nas taxas dos ângulos de Euler ($\dot\phi=p$, $\dot\theta=q$, $\dot\psi=r$), enquanto o único acoplamento entre atitude e translação ocorre por meio da gravidade: uma inclinação em arfagem ($\theta$) produz aceleração longitudinal ($-g\,\theta$ em $\dot u$) e uma inclinação em rolagem ($\phi$) produz aceleração lateral ($g\,\phi$ em $\dot v$). A matriz $\mathbf{B}$, por sua vez, concentra a ação de controle: os momentos atuam nas acelerações angulares por meio dos coeficientes de inércia $\Gamma_3$, $\Gamma_4$, $\Gamma_8$ e $1/J_y$, e o empuxo total $T$ atua na aceleração vertical através de $-1/m$.
+A estrutura dessas matrizes evidencia o desacoplamento característico do voo pairado. {\color{blue}O bloco superior de $\mathbf{A}$ reúne o amortecimento angular, no qual os coeficientes $L_p$, $M_q$ e $N_r$ aparecem processados pelos mesmos termos de inércia que atuam sobre os momentos de controle, de modo que o produto $J_{xz}$ mantém rolagem e guinada acopladas também no amortecimento, por meio de $\Gamma_4$.} Na matriz $\mathbf{A}$, as linhas da cinemática mapeiam diretamente as velocidades angulares nas taxas dos ângulos de Euler ($\dot\phi=p$, $\dot\theta=q$, $\dot\psi=r$), enquanto o único acoplamento entre atitude e translação ocorre por meio da gravidade: uma inclinação em arfagem ($\theta$) produz aceleração longitudinal ($-g\,\theta$ em $\dot u$) e uma inclinação em rolagem ($\phi$) produz aceleração lateral ($g\,\phi$ em $\dot v$). A matriz $\mathbf{B}$, por sua vez, concentra a ação de controle: os momentos atuam nas acelerações angulares por meio dos coeficientes de inércia $\Gamma_3$, $\Gamma_4$, $\Gamma_8$ e $1/J_y$, e o empuxo total $T$ atua na aceleração vertical através de $-1/m$.
+
+{\color{blue}Com os parâmetros do Capítulo~\ref{chap:resultados}, os jacobianos assumem os valores numéricos:
+\begin{equation}
+    \mathbf{A} =
+    \begin{bmatrix}
+        -5{,}41 & 0 & -0{,}02 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & -3{,}63 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        -0{,}05 & 0 & -0{,}77 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & -9{,}81 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 9{,}81 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0
+    \end{bmatrix},
+    \label{eq:matrix-A-num}
+\end{equation}
+\begin{equation}
+    \mathbf{B} =
+    \begin{bmatrix}
+        0 & 21{,}06 & 0 & 0{,}18 \\
+        0 & 0 & 10{,}38 & 0 \\
+        0 & 0{,}18 & 0 & 6{,}96 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 \\
+        -0{,}50 & 0 & 0 & 0
+    \end{bmatrix},
+    \label{eq:matrix-B-num}
+\end{equation}
+em que os polos do bloco rotacional, $-5{,}41$, $-3{,}63$ e $-0{,}77$~rad/s, são os amortecimentos de cada eixo processados pela inércia, e correspondem aos coeficientes $a$ e $b$ empregados no projeto das malhas de atitude da Tabela~\ref{tab:gain-att}.}

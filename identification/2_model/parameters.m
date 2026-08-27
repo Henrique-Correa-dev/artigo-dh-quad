@@ -200,20 +200,21 @@ function p = parameters(varargin)
     %  forma de momento: a derivação física produz momento, e a divisão por J
     %  que gerava c_p é justamente o passo que injetava a incerteza do CAD).
     %  SÓ O INFLUXO, o único mecanismo com o parâmetro MEDIDO no próprio voo
-    %  (k_v = 0,226 ± 0,013 N/(m/s), 2_model/measure_kv.m). A aerodinâmica da
+    %  (k_v = 0,2385 N/(m/s) TEORICO, elemento de pá + quantidade de movimento,
+    %  Apêndice A.1 da dissertação; o medido em voo era 0,226, measure_kv.m). A aerodinâmica da
     %  asa é termo separado (P(17:22)·V_a). O momento de cubo e a esteira foram
     %  retirados do a priori: o cubo depende de hipóteses sobre a pá (corda,
     %  inclinação de sustentação) sem medida, e a esteira não tem referência
     %  que a sustente como momento. Ficam no damping_budget.m como estimativa.
     %                            L_p       M_q       N_r
-    %    influxo 4·k_v·l²      0,0487    0,0964    0,0000
+    %    influxo 4·k_v·l²      0,0513    0,1017    0,0000   (k_v TEORICO 0,2385, prior_damping_moment)
     %    força H               0,0000    0,0000    0,0100   4·k_h·(l_x²+l_y²), elemento de pá
     %  É o termo ∂Z/∂x·Δy da Eq. 55 de Nguyen & Webb (2025): variação do empuxo
     %  com a velocidade axial induzida pela rotação do corpo, vezes o braço.
     p.P0_J = [p.J.Jx; p.J.Jy; p.J.Jz; p.J.Jxz; ...
               1; 1; 1; 1;       % k_T1..k_T4
               1; 1; 1; 1;       % k_Q1..k_Q4
-              0.0487; 0.0964; 0.0100; ...  % L_p, M_q, N_r [N·m·s] (ver nota acima)
+              0.0513; 0.1017; 0.0100; ...  % L_p, M_q, N_r [N·m·s] (ver nota acima)
               0.000; ...             % C_d = 0 — a aerodinâmica é SÓ ROTACIONAL
               -0.0769; -0.0222; ...  % Cl_p, Cl_β  MEDIDOS em asa fixa
               -5.540;  -0.435; ...   % Cm_q, Cm_α  MEDIDOS
@@ -263,6 +264,15 @@ function p = parameters(varargin)
                    0.30; ...                       % C_d  (limite alto de Beard)
                    0.0; 0.0; 0.0; 0.0; 0.0; 0.5; ...  % aero: sinais físicos (Cn_β > 0)
                    1.0; 1.0; 1.0];                    % L_v, M_w, N_v, sinal livre
+    %  LIBERAÇÃO OPCIONAL de Jz e Jxz (appdata 'jz_free'): abre os bounds para
+    %  o dado poder movê-los, com a desigualdade triangular do custo como
+    %  restrição física efetiva. Default: travados (comportamento oficial).
+    jzf_ = getappdata(0,'jz_free');
+    if ~isempty(jzf_) && isequal(jzf_,1)
+        p.bounds.lb(3) = 0.75*0.126192;   p.bounds.ub(3) = 1.25*0.126192;
+        p.bounds.lb(4) = 0.80*0.001571;   p.bounds.ub(4) = 2.00*0.001571;
+    end
+
     %  Aerodinâmicos: bounds one-sided pelo SINAL FÍSICO (amortecimento < 0,
     %  Cl_β < 0 diedro, Cm_α < 0 estabilidade estática, Cn_β > 0 deriva),
     %  com folga de 10× o valor do AVL para o dado poder falar.
